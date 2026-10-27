@@ -16,3 +16,16 @@ Tests (Node 20):
 - `PW=$(npm root -g)/playwright-core node tools/screens.js` takes headless screenshots at 390×844. It needs `python3 -m http.server 8765` running in this folder.
 
 All art, colours, icons and sounds (WebAudio) are original and made in code. See credits.txt.
+
+## Levels mode (endless)
+
+- Switch between **Daily** (one shared puzzle a day) and **Levels** at the top.
+- Levels 1–300 are precomputed in `js/levels.js`, and each one is checked to have exactly one solution. Levels above 300 are built on the device from a fixed seed (`paneslide:level:v1:N`), so every player gets the same level N. A time cap and an easier fallback seed keep generation fast.
+- The board grows from 3×3 to 4×4 to 5×5 and stops at 5×5 around level 23. After that, difficulty comes from other levers: more panes, more overlapping colours, more ways each pane could fit, and new pane shapes. These rise on a gentle log curve that plateaus around level 200, so later levels stay "hard but fair".
+- For variety, each 20-level chapter has its own name and colours. Some levels are easy breathers, every 20th level from 15 is a challenge, and twists appear over time: locked glass (from 30), two-colour levels (from 45) and glass that slides any direction (from 70). Each twist gets a one-line tip the first time it appears.
+- Stars: 3 = solved in par, 2 = within par+2, 1 = solved. Using a hint caps the level at 2 stars.
+- Hints: you start with 3 and can hold at most 5. You earn +1 per milestone and +1 for every three 3-star levels.
+- Milestones come at level 5 and every 10 levels. They show a rank badge and your real stats from this device, plus spoiler-free share text.
+- Progress is saved in localStorage (`ps2:levels`).
+
+Tools: `node tools/build-levels.js 300`, `node tools/validate-levels.js 1000`, `node tools/screens-levels.js` (needs playwright-core + Chrome).

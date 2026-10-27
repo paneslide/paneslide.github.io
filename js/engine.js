@@ -61,6 +61,7 @@
 
   // Cells covered by pane p at position pos.
   function paneCells(p, pos) {
+    if (p.axis === "b") { var pr = Math.floor(pos / (p.mc + 1)), pc = pos % (p.mc + 1); return p.cells.map(function (x) { return [x[0] + pr, x[1] + pc]; }); }
     return p.cells.map(function (x) {
       return p.axis === "h" ? [x[0] + p.base, x[1] + pos] : [x[0] + pos, x[1] + p.base];
     });
@@ -92,6 +93,7 @@
     var k = puz.panes.length, pos = new Array(k).fill(0);
     (function rec(i) {
       if (i === k) { fn(pos.slice()); return; }
+      if (puz.panes[i].locked) { pos[i] = puz.solution[i]; rec(i + 1); return; }
       for (var v = 0; v <= puz.panes[i].max; v++) { pos[i] = v; rec(i + 1); }
     })(0);
   }
@@ -111,9 +113,9 @@
 
   function makeCandidate(cfg, rng) {
     var n = cfg.n;
-    var colors = ["C", "M", "Y"];
+    var colors = (cfg.colors || ["C", "M", "Y"]).slice();
     for (var i = colors.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)); var t = colors[i]; colors[i] = colors[j]; colors[j] = t; }
-    while (colors.length < cfg.panes) colors.push(colors[Math.floor(rng() * 3)]);
+    while (colors.length < cfg.panes) colors.push(colors[Math.floor(rng() * colors.length)]);
     var panes = [];
     for (var k = 0; k < cfg.panes; k++) {
       var cells = SHAPES[cfg.shapes[Math.floor(rng() * cfg.shapes.length)]];
@@ -128,7 +130,15 @@
       if (n >= 5 && max < 2) return null; // rails need at least 3 stops on bigger boards
       panes.push({ color: colors[k], cells: cells, axis: axis, base: Math.floor(rng() * (baseMax + 1)), max: max, h: h, w: w });
     }
-    // Keep rails readable: sort panes h-first then v, stable by colour order.
+    if (cfg.free) { // one pane slides both ways
+      var fp = panes[Math.floor(rng() * panes.length)], mr = n - fp.h, mc = n - fp.w;
+      fp.axis = "b"; fp.base = 0; fp.mc = mc; fp.max = (mr + 1) * (mc + 1) - 1;
+    }
+    if (cfg.locked) { // one pane is fixed in place
+      var lk = panes.filter(function (p) { return p.axis !== "b"; });
+      if (!lk.length) return null;
+      lk[Math.floor(rng() * lk.length)].locked = true;
+    }
     var solution = panes.map(function (p) { return Math.floor(rng() * (p.max + 1)); });
     return { n: n, panes: panes, solution: solution };
   }
@@ -169,11 +179,13 @@
     return puz.panes.every(function (p, i) { return paneCells(p, pos[i]).some(function (c) { return cover[c[0] * puz.n + c[1]] === 1; }); });
   }
 
-  function pickStart(puz, rng) {
+  function movable(puz) { return puz.panes.filter(function (p) { return !p.locked; }).length; } // = par
+  function pickStart(puz, rng, minDiff) {
+    if (minDiff == null) minDiff = 4;
     for (var t = 0; t < 2000; t++) {
-      var pos = puz.panes.map(function (p) { return Math.floor(rng() * (p.max + 1)); });
+      var pos = puz.panes.map(function (p, i) { return p.locked ? puz.solution[i] : Math.floor(rng() * (p.max + 1)); });
       var moved = pos.filter(function (v, i) { return v !== puz.solution[i]; }).length;
-      if (moved === puz.panes.length && diffCount(render(puz, pos), puz.target) >= 4 && allVisible(puz, pos)) return pos; // every pane starts out of place, so par = number of panes
+      if (moved === movable(puz) && diffCount(render(puz, pos), puz.target) >= minDiff && allVisible(puz, pos)) return pos; // every pane starts out of place, so par = number of panes
     }
     return null; // no fair start for this layout; generate() tries another
   }
@@ -212,10 +224,134 @@
     return puz;
   }
 
+
+  // ================= Levels mode =================
+  // Difficulty curve. The board grows only at the start (3x3 -> 4x4 -> 5x5 by level 23) and
+  // then stays 5x5 forever. After that, difficulty rises on a slow log2 scale s(d) through
+  // other levers: 3 -> 4 panes (later sometimes 5), more mixed cells, more "plausible spots"
+  // (fits), bigger shapes and both slide directions. Breathers (x1, x6 after level 10) are
+  // played at about 30% of the level's difficulty. Seeded variety keeps neighbours different.
+  // Shape "flavours" rotate from level to level so neighbours look different.
+  var FLAVOURS = { mix: ["I2", "I3", "L3", "O4"], bars: ["I2", "I3", "I4"], corners: ["L3", "L4", "T4"], blocks: ["O4", "S4", "P5", "T4"], big: ["P5", "U5", "X5", "L5", "T4"] };
+  var FLAVOUR_UNLOCK = [["mix"], ["mix", "bars", "corners"], ["mix", "bars", "corners", "blocks"], ["bars", "corners", "blocks", "big"]];
+  // Twists, each introduced on a fixed level and then mixed in now and then.
+  var TWISTS = { locked: 30, duo: 45, free: 70 };
+  function isBreather(N) { return N > 10 && (N % 10 === 1 || N % 10 === 6); }
+  function isChallenge(N) { return N >= 15 && N % 20 === 15; }
+  var CEIL = 3.6;
+  function curveS(d) { return d <= 22 ? 0 : Math.log(1 + (d - 22) / 20) / Math.LN2; }
+  function levelConfig(N) {
+    var br = isBreather(N), ch = isChallenge(N);
+    var d = br ? Math.max(1, Math.round(N * 0.3)) : ch ? Math.round(N * 1.6) + 10 : N;
+    var h = hashStr("paneslide:lvcfg:" + N), base = { d: d, breather: br, challenge: ch, total: 8, flavour: "mix" };
+    function mk(o) { for (var k in base) if (!(k in o)) o[k] = base[k]; return o; }
+    if (d <= 3) return mk({ n: 3, panes: 2, shapes: ["I2"], fits: 1, mixed: 1, total: 4, diff: 2, s: 0 });
+    if (d <= 8) return mk({ n: 3, panes: 2, shapes: ["I2", "L3"], fits: 1, mixed: 1, total: 4, diff: 2, s: 0 });
+    if (d <= 14) return mk({ n: 4, panes: 2, shapes: ["I2", "I3", "L3"], fits: 1, mixed: 2, total: 6, diff: 3, s: 0 });
+    if (d <= 22) return mk({ n: 4, panes: 3, shapes: ["I2", "I3", "L3", "O4"], fits: 1, mixed: 2, diff: 4, s: 0 });
+    // Plateau: the levers stop at a "hard but fair" ceiling (s = 3.6, reached around level 200).
+    // After that only variety changes: flavours, twists, chapters, challenges.
+    var s = Math.min(CEIL, curveS(d));
+    var panes = s < 1.3 ? 3 : 4;
+    var fl = FLAVOUR_UNLOCK[s < 1 ? 0 : s < 2.2 ? 1 : s < 3.2 ? 2 : 3];
+    var flavour = fl[(h >>> 4) % fl.length];
+    var fits = Math.max(1, Math.min(4, 1 + Math.floor(s)) - ((h >>> 8) % 3 === 0 ? 1 : 0));
+    var mixed = Math.min(7, 3 + Math.floor(s / 1.5));
+    var cfg = mk({ n: 5, panes: panes, shapes: FLAVOURS[flavour], flavour: flavour, fits: fits, mixed: mixed, diff: 4, s: Math.round(s * 100) / 100 });
+    if (!br) { // twists: always on their intro level, then roughly 1 level in 4-5
+      var twist = N === TWISTS.locked ? "locked" : N === TWISTS.duo ? "duo" : N === TWISTS.free ? "free" : null;
+      if (!twist && !ch) {
+        var opts = []; for (var t in TWISTS) if (N > TWISTS[t]) opts.push(t);
+        if (opts.length && (h >>> 12) % 9 < 2) twist = opts[(h >>> 16) % opts.length];
+      }
+      if (twist === "locked") { cfg.locked = true; cfg.panes += 1; }
+      if (twist === "duo") { var pairs = [["C", "M"], ["C", "Y"], ["M", "Y"]]; cfg.colors = pairs[(h >>> 20) % 3]; cfg.mixed = Math.max(2, cfg.mixed - 2); }
+      if (twist === "free") { cfg.free = true; cfg.panes = Math.max(3, cfg.panes - 1); }
+      cfg.twist = twist;
+    }
+    return cfg;
+  }
+  // Fast check. A pane can only sit where every cell it covers already has its colour in the
+  // target (glass never removes colour), so the solver only needs to try those "fitting" spots.
+  // That gives exactly the same answer as brute force, much faster.
+  function validateLevel(puz, cfg, minFits) {
+    var n = puz.n;
+    puz.target = render(puz, puz.solution);
+    var mixed = 0, white = 0;
+    puz.target.forEach(function (m) { if (m === 0) white++; else if (m & (m - 1)) mixed++; });
+    if (mixed < cfg.mixed) return false;
+    if (white < Math.ceil(n * n * 0.15)) return false;
+    var total = 1; puz.panes.forEach(function (p) { total *= p.max + 1; });
+    if (total < cfg.total) return false;
+    var fitList = puz.panes.map(function (p, i) {
+      if (p.locked) return [puz.solution[i]];
+      var out = [];
+      for (var v = 0; v <= p.max; v++) if (paneCells(p, v).every(function (c) { return puz.target[c[0] * n + c[1]] & BIT[p.color]; })) out.push(v);
+      return out;
+    });
+    var fits = fitList.reduce(function (a, l) { return a * l.length; }, 1);
+    if (fits < minFits) return false;
+    for (var i = 0; i < puz.panes.length; i++) {
+      var sub = { n: n, panes: puz.panes.filter(function (_, j) { return j !== i; }) };
+      if (sameImg(render(sub, puz.solution.filter(function (_, j) { return j !== i; })), puz.target)) return false;
+    }
+    var count = 0, pos = new Array(puz.panes.length);
+    (function rec(i) {
+      if (count > 1) return;
+      if (i === puz.panes.length) { if (sameImg(render(puz, pos), puz.target)) count++; return; }
+      for (var k = 0; k < fitList[i].length; k++) { pos[i] = fitList[i][k]; rec(i + 1); }
+    })(0);
+    if (count !== 1) return false;
+    puz.fits = fits;
+    return true;
+  }
+  function buildLevel(N, cfg, seed, deadline) {
+    var rng = mulberry32(hashStr(seed));
+    for (var attempt = 0; attempt < 9000; attempt++) {
+      if (deadline && (attempt & 63) === 0 && Date.now() > deadline) return null;
+      var c = makeCandidate(cfg, rng);
+      if (!c) continue;
+      if (cfg.panes >= 3 && c.panes.every(function (p) { return p.axis === c.panes[0].axis; })) continue; // mix directions
+      if (cfg.colors && cfg.colors.some(function (k) { return !c.panes.some(function (p) { return p.color === k; }); })) continue;
+      var minFits = attempt < 3000 ? cfg.fits : attempt < 6000 ? Math.max(1, cfg.fits - 1) : 1;
+      if (!validateLevel(c, cfg, minFits)) continue;
+      c.start = pickStart(c, rng, cfg.diff);
+      if (!c.start) continue;
+      c.level = N; c.breather = cfg.breather; c.challenge = cfg.challenge; c.twist = cfg.twist || null; c.flavour = cfg.flavour; c.attempts = attempt + 1;
+      return c;
+    }
+    return null;
+  }
+  // Level N is always the same puzzle. If generation runs past its budget (attempts, or the
+  // optional wall-clock deadline on a slow phone), fall back to a seeded, easier tier.
+  function generateLevel(N, opts) {
+    var deadline = opts && opts.ms ? Date.now() + opts.ms : 0;
+    var cfg = levelConfig(N);
+    var lv = buildLevel(N, cfg, "paneslide:level:v1:" + N, deadline);
+    for (var k = 1; !lv && k < 12; k++) {
+      var fb = levelConfig(Math.max(1, Math.floor(cfg.d * Math.pow(0.7, k))));
+      fb.breather = cfg.breather; fb.challenge = cfg.challenge;
+      if (cfg.twist === "locked") { fb.locked = true; fb.panes++; } if (cfg.twist === "duo") fb.colors = cfg.colors; if (cfg.twist === "free") fb.free = true; fb.twist = cfg.twist;
+      lv = buildLevel(N, fb, "paneslide:level:v1:" + N + ":fb" + k, 0);
+      if (lv) lv.fallback = k;
+    }
+    if (!lv) throw new Error("Could not generate level " + N);
+    return lv;
+  }
+  // Compact storage for the precomputed level file.
+  function packLevel(l) { return [l.n, l.panes.map(function (p) { var q = [p.color, p.cells, p.axis, p.base, p.max]; if (p.axis === "b") q.push(p.mc); if (p.locked) q[5] = q[5] == null ? -1 : q[5], q.push(1); return q; }), l.solution, l.start, (l.breather ? 1 : 0) | (l.challenge ? 2 : 0), l.twist || 0, l.flavour]; }
+  function unpackLevel(a, N) {
+    var puz = { n: a[0], level: N, solution: a[2], start: a[3], breather: !!(a[4] & 1), challenge: !!(a[4] & 2), twist: a[5] || null, flavour: a[6],
+      panes: a[1].map(function (q) { var dm = dims(q[1]), p = { color: q[0], cells: q[1], axis: q[2], base: q[3], max: q[4], h: dm[0], w: dm[1] }; if (q[2] === "b") p.mc = q[5]; if (q[6] === 1) p.locked = true; return p; }) };
+    puz.target = render(puz, puz.solution);
+    return puz;
+  }
+
   var api = {
     BIT: BIT, MASK_NAME: MASK_NAME, EPOCH: EPOCH, SHAPES: SHAPES, DAYS: DAYS,
     generate: generate, tutorial: tutorial, allVisible: allVisible, solve: solve, render: render, rowFeedback: rowFeedback,
-    paneCells: paneCells, diffCount: diffCount, puzzleNumber: puzzleNumber, addDays: addDays, parseDate: parseDate
+    paneCells: paneCells, diffCount: diffCount, curveS: curveS, movable: movable, TWISTS: TWISTS, isChallenge: isChallenge, levelConfig: levelConfig, generateLevel: generateLevel,
+    validateLevel: validateLevel, packLevel: packLevel, unpackLevel: unpackLevel, isBreather: isBreather, puzzleNumber: puzzleNumber, addDays: addDays, parseDate: parseDate
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.PaneEngine = api;

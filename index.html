@@ -7,7 +7,7 @@
 <meta name="description" content="PaneSlide is a free, calm daily puzzle. Slide coloured glass panes so the window matches the picture. Where glass overlaps, colours mix.">
 <meta name="theme-color" content="#F5EFE4">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=2">
 </head>
 <body>
 <header class="top">
@@ -33,7 +33,24 @@
   </nav>
 </header>
 
+<div class="tabs" id="tabs" role="tablist">
+  <button class="tab on" id="tabDaily" role="tab">Daily</button>
+  <button class="tab" id="tabLevels" role="tab">Levels</button>
+</div>
+
 <main>
+ <section id="mapView" class="map" hidden>
+  <div class="map-top">
+  <div class="map-head">
+    <div class="pill"><span class="lab">Stars</span> <b id="mapStars">0</b></div>
+    <div class="pill soft"><span class="lab">Rank</span> <b id="mapRank">New</b></div>
+    <div class="pill soft"><span class="lab">💡</span> <b id="mapHints">3</b></div>
+  </div>
+  <button class="primary" id="btnPlayNext">Play level 1</button>
+  </div>
+  <div class="path" id="mapPath"></div>
+ </section>
+ <div id="playView" class="play">
   <p class="rule" id="rule">Slide the glass to copy the picture. Where glass overlaps, colours mix.</p>
 
   <section class="target-card" aria-label="Target picture">
@@ -49,8 +66,12 @@
   <section class="status" id="status">
     <div class="pill"><span class="lab">Moves</span> <b id="moves">0</b></div>
     <div class="pill soft"><span class="lab">Par</span> <b id="par">0</b></div>
+    <button class="pill hint" id="btnHint" hidden aria-label="Use a hint">💡 <span class="lab">Hint</span> <b id="hintCount">3</b></button>
   </section>
+  <div class="star-line" id="starLine" hidden aria-label="Stars still possible"></div>
   <button id="btnSkip" class="link" hidden>Skip tutorial</button>
+  <button id="btnToMap" class="link" hidden>‹ Level map</button>
+ </div>
 </main>
 
 <canvas id="confetti" aria-hidden="true"></canvas>
@@ -66,6 +87,7 @@
   </div>
   <div class="mixes" id="mixList"></div>
   <p class="small">Try to finish in <b>par</b>: one move per pane. A new puzzle every day at midnight. Monday is gentle, Sunday is chunky.</p>
+  <p class="small"><b>Levels:</b> endless puzzles in chapters of 20. Par = 3 stars, up to 2 over par = 2 stars, any finish = 1 star. A hint shows one correct move and caps that level at 2 stars. Earn hints at milestones and every 3 three-star levels (max 5).</p>
   <button class="primary" id="btnReplayTut">Replay the 20-second tutorial</button>
 </dialog>
 
@@ -78,6 +100,27 @@
   <button id="btnShare" class="primary">Share result</button>
   <div class="end-stats" id="endStats"></div>
   <p class="small center" id="countdown"></p>
+  <button class="ghost wide" id="btnToLevels">Play Levels while you wait →</button>
+</dialog>
+
+<dialog id="dlgLevel" class="sheet">
+  <div class="stars big" id="lvStars"></div>
+  <h2 id="lvTitle" class="center"></h2>
+  <p id="lvSub" class="sub center"></p>
+  <button class="primary" id="btnNext">Next level ▶</button>
+  <div class="row2"><button class="ghost" id="btnReplay">Replay</button><button class="ghost" id="btnMap2">Level map</button></div>
+</dialog>
+
+<dialog id="dlgMile" class="sheet mile">
+  <div id="mileBadge" class="badge"></div>
+  <div class="kicker" id="mileKicker">Milestone</div>
+  <h2 id="mileTitle" class="center"></h2>
+  <p id="mileSub" class="sub center"></p>
+  <div class="end-stats" id="mileStats"></div>
+  <pre id="mileShare" class="share-preview"></pre>
+  <button class="primary" id="btnMileShare">Share milestone</button>
+  <button class="ghost wide" id="btnMileNext">Next level ▶</button>
+  <p class="small center">Counted from your own play on this device.</p>
 </dialog>
 
 <dialog id="dlgStats" class="sheet">
@@ -93,7 +136,7 @@
   <label class="switch"><span>Colour-blind patterns<small>Stripes for cyan, dots for magenta, lines for yellow</small></span><input type="checkbox" id="optPatterns"><i></i></label>
 </dialog>
 
-<script src="js/engine.js"></script>
-<script src="js/game.js"></script>
+<script src="js/engine.js?v=2"></script>
+<script src="js/game.js?v=2"></script>
 </body>
 </html>
