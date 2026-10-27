@@ -115,6 +115,7 @@
     var n = cfg.n;
     var colors = (cfg.colors || ["C", "M", "Y"]).slice();
     for (var i = colors.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)); var t = colors[i]; colors[i] = colors[j]; colors[j] = t; }
+    if (cfg.dup) colors = colors.slice(0, Math.max(1, Math.min(colors.length, cfg.panes - cfg.dup))); // repeated colours make panes ambiguous
     while (colors.length < cfg.panes) colors.push(colors[Math.floor(rng() * colors.length)]);
     var panes = [];
     for (var k = 0; k < cfg.panes; k++) {
@@ -201,6 +202,7 @@
       if (!v.ok) continue;
       c.start = pickStart(c, rng);
       if (!c.start) continue;
+      if (!grabOrder(c, c.start)) continue; // par must be reachable (see grabOrder)
       c.date = dateStr;
       c.number = puzzleNumber(dateStr);
       c.day = cfg.label;
@@ -226,55 +228,85 @@
 
 
   // ================= Levels mode =================
-  // Difficulty curve. The board grows only at the start (3x3 -> 4x4 -> 5x5 by level 23) and
-  // then stays 5x5 forever. After that, difficulty rises on a slow log2 scale s(d) through
-  // other levers: 3 -> 4 panes (later sometimes 5), more mixed cells, more "plausible spots"
-  // (fits), bigger shapes and both slide directions. Breathers (x1, x6 after level 10) are
-  // played at about 30% of the level's difficulty. Seeded variety keeps neighbours different.
-  // Shape "flavours" rotate from level to level so neighbours look different.
-  var FLAVOURS = { mix: ["I2", "I3", "L3", "O4"], bars: ["I2", "I3", "I4"], corners: ["L3", "L4", "T4"], blocks: ["O4", "S4", "P5", "T4"], big: ["P5", "U5", "X5", "L5", "T4"] };
-  var FLAVOUR_UNLOCK = [["mix"], ["mix", "bars", "corners"], ["mix", "bars", "corners", "blocks"], ["bars", "corners", "blocks", "big"]];
-  // Twists, each introduced on a fixed level and then mixed in now and then.
-  var TWISTS = { locked: 30, duo: 45, free: 70 };
+  // Difficulty curve v2 (27 Oct 2026). Feedback on v1: the first 40 levels felt the same and too
+  // easy, because every pane fitted the picture in only one spot until about level 42.
+  // v2 ramps up early and then levels off:
+  //   ramp(N) = 10 * (1 - e^(-(N-3)/50)): about 1.3 at level 10, 2.9 at level 20, 4.2 at level 30,
+  //   6.1 at level 50 and 8.5 at level 100, then flattening near 9.5-9.8 from level 150 to 200.
+  // A sawtooth inside every 10-level block (breather, build-up, spike, breather, build-up,
+  // challenge) makes the change in difficulty something you feel.
+  // The main lever is ambiguity. "fits" = how many ways the panes could sit where every cell they
+  // cover already has their colour in the target (plausible spots, right or wrong). "decoys" = how
+  // many panes have more than one plausible spot. Higher values mean more wrong-but-plausible
+  // moves, so you have to reason about the colour mixing.
+  // These are hard requirements: generation never quietly lowers them. If a seed fails, it tries
+  // more seeds, and only as a very last resort a slightly easier tier.
+  // Shape "flavours" rotate from level to level so neighbouring levels look different.
+  var FLAVOURS = { mix: ["I2", "I3", "L3", "O4"], bars: ["I2", "I3", "I4"], corners: ["L3", "L4", "T4"], blocks: ["O4", "S4", "P5", "T4"], big: ["P5", "U5", "X5", "L5", "T4"], tiny: ["I2", "L3"] };
+  var FLAVOUR_UNLOCK = [["tiny", "mix"], ["mix", "bars", "corners"], ["mix", "bars", "corners", "blocks"], ["bars", "corners", "blocks", "big", "mix"]];
+  // Twists: each is introduced on a fixed level and then mixed in now and then.
+  var TWISTS = { locked: 12, duo: 18, free: 33 };
+  var SAW = [1.0, 0.55, 0.9, 1.0, 1.1, 1.3, 0.75, 1.05, 1.15, 1.45]; // by N % 10
   function isBreather(N) { return N > 10 && (N % 10 === 1 || N % 10 === 6); }
-  function isChallenge(N) { return N >= 15 && N % 20 === 15; }
-  var CEIL = 3.6;
-  function curveS(d) { return d <= 22 ? 0 : Math.log(1 + (d - 22) / 20) / Math.LN2; }
-  function levelConfig(N) {
-    var br = isBreather(N), ch = isChallenge(N);
-    var d = br ? Math.max(1, Math.round(N * 0.3)) : ch ? Math.round(N * 1.6) + 10 : N;
-    var h = hashStr("paneslide:lvcfg:" + N), base = { d: d, breather: br, challenge: ch, total: 8, flavour: "mix" };
+  function isChallenge(N) { return N >= 9 && N % 10 === 9; }
+  var CEIL = 10;
+  function curveS(N) { return N <= 3 ? 0 : CEIL * (1 - Math.exp(-(N - 3) / 50)); }
+  function effOf(N) { var m = N >= 11 || N % 10 === 9 ? SAW[N % 10] : 1; return Math.min(11, curveS(N) * m); }
+  function tierFor(e, h) {
+    if (e < 1.0) return { n: 4, panes: 3, dup: 1, fl: 0, fits: 2, decoys: 1, mixed: 2, diff: 3, total: 8 };
+    if (e < 2.0) return { n: 4, panes: 3, dup: 1, fl: 0, fits: 3, decoys: 2, mixed: 2, diff: 3, total: 8 };
+    if (e < 3.8) return { n: 4, panes: 4, dup: (h >>> 6) % 2 ? 2 : 1, fl: 1, fits: 4, decoys: 2, mixed: 3, diff: 4, total: 8 };
+    var panes = e < 6.5 ? 4 : e < 8.5 ? ((h >>> 3) % 2 ? 5 : 4) : 5;
+    var dup = panes === 4 ? (e >= 5.5 || (e >= 4.5 && (h >>> 6) % 2) ? 2 : 1) : 2;
+    return { n: 5, panes: panes, dup: dup, fl: e < 5 ? 1 : e < 7.5 ? 2 : 3,
+      fits: Math.min(panes === 4 ? (dup === 2 ? 8 : 4) : 12, Math.round(e * 1.2)), decoys: Math.min(panes - 2, 2 + Math.floor((e - 4) / 3)),
+      mixed: Math.min(6, 4 + Math.floor((e - 4) / 2.5)), diff: 5, total: 8 };
+  }
+  function levelConfig(N, eOverride, rot) {
+    var br = isBreather(N), ch = isChallenge(N), h = hashStr("paneslide:lvcfg2:" + N);
+    var e = eOverride != null ? eOverride : effOf(N);
+    var base = { d: N, e: Math.round(e * 100) / 100, s: Math.round(e * 100) / 100, breather: br, challenge: ch };
     function mk(o) { for (var k in base) if (!(k in o)) o[k] = base[k]; return o; }
-    if (d <= 3) return mk({ n: 3, panes: 2, shapes: ["I2"], fits: 1, mixed: 1, total: 4, diff: 2, s: 0 });
-    if (d <= 8) return mk({ n: 3, panes: 2, shapes: ["I2", "L3"], fits: 1, mixed: 1, total: 4, diff: 2, s: 0 });
-    if (d <= 14) return mk({ n: 4, panes: 2, shapes: ["I2", "I3", "L3"], fits: 1, mixed: 2, total: 6, diff: 3, s: 0 });
-    if (d <= 22) return mk({ n: 4, panes: 3, shapes: ["I2", "I3", "L3", "O4"], fits: 1, mixed: 2, diff: 4, s: 0 });
-    // Plateau: the levers stop at a "hard but fair" ceiling (s = 3.6, reached around level 200).
-    // After that only variety changes: flavours, twists, chapters, challenges.
-    var s = Math.min(CEIL, curveS(d));
-    var panes = s < 1.3 ? 3 : 4;
-    var fl = FLAVOUR_UNLOCK[s < 1 ? 0 : s < 2.2 ? 1 : s < 3.2 ? 2 : 3];
-    var flavour = fl[(h >>> 4) % fl.length];
-    var fits = Math.max(1, Math.min(4, 1 + Math.floor(s)) - ((h >>> 8) % 3 === 0 ? 1 : 0));
-    var mixed = Math.min(7, 3 + Math.floor(s / 1.5));
-    var cfg = mk({ n: 5, panes: panes, shapes: FLAVOURS[flavour], flavour: flavour, fits: fits, mixed: mixed, diff: 4, s: Math.round(s * 100) / 100 });
-    if (!br) { // twists: always on their intro level, then roughly 1 level in 4-5
+    if (N <= 3 && eOverride == null) return mk({ n: 3, panes: 2, shapes: N === 3 ? ["I2", "L3"] : ["I2"], flavour: "tiny", fits: 1, decoys: 0, mixed: 1, total: 4, diff: 2 });
+    var t = tierFor(e, h), fl = FLAVOUR_UNLOCK[t.fl], flavour = fl[(h >>> 4) % fl.length];
+    if (rot) flavour = fl[((h >>> 4) + rot) % fl.length];
+    var cfg = mk({ n: t.n, panes: t.panes, dup: t.dup, shapes: FLAVOURS[flavour], flavour: flavour, fits: t.fits, decoys: t.decoys, mixed: flavour === "bars" ? Math.max(2, t.mixed - 1) : t.mixed, total: t.total, diff: t.diff, trap: e >= 2 });
+    if (!br) { // twists: always on their intro level, then roughly 1 level in 4
       var twist = N === TWISTS.locked ? "locked" : N === TWISTS.duo ? "duo" : N === TWISTS.free ? "free" : null;
       if (!twist && !ch) {
-        var opts = []; for (var t in TWISTS) if (N > TWISTS[t]) opts.push(t);
-        if (opts.length && (h >>> 12) % 9 < 2) twist = opts[(h >>> 16) % opts.length];
+        var opts = []; for (var tw in TWISTS) if (N > TWISTS[tw]) opts.push(tw);
+        if (opts.length && (h >>> 12) % 4 === 0) twist = opts[(h >>> 16) % opts.length];
       }
-      if (twist === "locked") { cfg.locked = true; cfg.panes += 1; }
-      if (twist === "duo") { var pairs = [["C", "M"], ["C", "Y"], ["M", "Y"]]; cfg.colors = pairs[(h >>> 20) % 3]; cfg.mixed = Math.max(2, cfg.mixed - 2); }
-      if (twist === "free") { cfg.free = true; cfg.panes = Math.max(3, cfg.panes - 1); }
-      cfg.twist = twist;
+      applyTwist(cfg, twist, h);
     }
     return cfg;
+  }
+  function applyTwist(cfg, twist, h) {
+    if (twist === "locked") { cfg.locked = true; cfg.panes += 1; cfg.dup = (cfg.dup || 0) + 1; }
+    if (twist === "duo") { var pairs = [["C", "M"], ["C", "Y"], ["M", "Y"]]; cfg.colors = pairs[(h >>> 20) % 3]; cfg.mixed = Math.max(2, cfg.mixed - 2); }
+    if (twist === "free") { cfg.free = true; }
+    cfg.twist = twist || null;
+  }
+  function fitLists(puz) {
+    var n = puz.n;
+    return puz.panes.map(function (p, i) {
+      if (p.locked) return [puz.solution[i]];
+      var out = [];
+      for (var v = 0; v <= p.max; v++) if (paneCells(p, v).every(function (c) { return puz.target[c[0] * n + c[1]] & BIT[p.color]; })) out.push(v);
+      return out;
+    });
+  }
+  // Ambiguity metrics for a level: fits (plausible spot combinations), decoys (panes with more
+  // than one plausible spot) and traps (panes that start on a plausible but wrong spot).
+  function ambiguity(puz) {
+    var fl = fitLists(puz), fits = 1, decoys = 0, traps = 0;
+    fl.forEach(function (l, i) { fits *= l.length; if (!puz.panes[i].locked && l.length > 1) decoys++; if (puz.start && !puz.panes[i].locked && puz.start[i] !== puz.solution[i] && l.indexOf(puz.start[i]) >= 0) traps++; });
+    return { fits: fits, decoys: decoys, traps: traps };
   }
   // Fast check. A pane can only sit where every cell it covers already has its colour in the
   // target (glass never removes colour), so the solver only needs to try those "fitting" spots.
   // That gives exactly the same answer as brute force, much faster.
-  function validateLevel(puz, cfg, minFits) {
+  function validateLevel(puz, cfg) {
     var n = puz.n;
     puz.target = render(puz, puz.solution);
     var mixed = 0, white = 0;
@@ -283,14 +315,10 @@
     if (white < Math.ceil(n * n * 0.15)) return false;
     var total = 1; puz.panes.forEach(function (p) { total *= p.max + 1; });
     if (total < cfg.total) return false;
-    var fitList = puz.panes.map(function (p, i) {
-      if (p.locked) return [puz.solution[i]];
-      var out = [];
-      for (var v = 0; v <= p.max; v++) if (paneCells(p, v).every(function (c) { return puz.target[c[0] * n + c[1]] & BIT[p.color]; })) out.push(v);
-      return out;
-    });
-    var fits = fitList.reduce(function (a, l) { return a * l.length; }, 1);
-    if (fits < minFits) return false;
+    var fitList = fitLists(puz);
+    var fits = 1, decoys = 0;
+    fitList.forEach(function (l, i) { fits *= l.length; if (!puz.panes[i].locked && l.length > 1) decoys++; });
+    if (fits < cfg.fits || decoys < (cfg.decoys || 0)) return false;
     for (var i = 0; i < puz.panes.length; i++) {
       var sub = { n: n, panes: puz.panes.filter(function (_, j) { return j !== i; }) };
       if (sameImg(render(sub, puz.solution.filter(function (_, j) { return j !== i; })), puz.target)) return false;
@@ -302,38 +330,85 @@
       for (var k = 0; k < fitList[i].length; k++) { pos[i] = fitList[i][k]; rec(i + 1); }
     })(0);
     if (count !== 1) return false;
-    puz.fits = fits;
+    puz.fits = fits; puz.fitList = fitList;
     return true;
   }
-  function buildLevel(N, cfg, seed, deadline) {
+  // Par must be reachable: there has to be an order of one slide per pane in which every pane can
+  // still be grabbed when its turn comes. A pane can be hidden under a same-direction pane that was
+  // moved more recently (the board picks the top one), so the order sometimes matters.
+  function grabOrder(puz, start) {
+    var todo = [], P = start.slice(), z = puz.panes.map(function () { return 0; });
+    puz.panes.forEach(function (p, i) { if (!p.locked && start[i] !== puz.solution[i]) todo.push(i); });
+    function at(c) { var o = []; puz.panes.forEach(function (p, i) { if (paneCells(p, P[i]).some(function (q) { return q[0] === c[0] && q[1] === c[1]; })) o.push(i); }); return o; }
+    function grabbable(i) {
+      var p = puz.panes[i], wants = p.axis === "b" ? ["h", "v"] : [p.axis];
+      return paneCells(p, P[i]).some(function (c) {
+        var cands = at(c).filter(function (q) { return !puz.panes[q].locked; }).sort(function (a, b) { return z[a] - z[b] || a - b; });
+        return wants.some(function (w) { var m = cands.filter(function (q) { return puz.panes[q].axis === w || puz.panes[q].axis === "b"; }); return (m.length ? m : cands).slice(-1)[0] === i; });
+      });
+    }
+    var top = 0;
+    return (function rec(left) {
+      if (!left.length) return [];
+      for (var k = 0; k < left.length; k++) {
+        var i = left[k]; if (!grabbable(i)) continue;
+        var old = P[i], oz = z[i]; P[i] = puz.solution[i]; z[i] = ++top;
+        var r = rec(left.filter(function (_, j) { return j !== k; }));
+        P[i] = old; z[i] = oz; top--;
+        if (r) return [i].concat(r);
+      }
+      return null;
+    })(todo);
+  }
+  // Start position: every movable pane out of place, every pane grabbable, and from the middle of
+  // the curve at least one pane starts on a wrong spot that looks right (a trap).
+  function pickLevelStart(puz, rng, cfg) {
+    var fl = puz.fitList;
+    for (var t = 0; t < 1500; t++) {
+      var pos = puz.panes.map(function (p, i) {
+        if (p.locked) return puz.solution[i];
+        var wrongFits = fl[i].filter(function (v) { return v !== puz.solution[i]; });
+        if (cfg.trap && wrongFits.length && rng() < 0.5) return wrongFits[Math.floor(rng() * wrongFits.length)];
+        return Math.floor(rng() * (p.max + 1));
+      });
+      if (!pos.every(function (v, i) { return puz.panes[i].locked || v !== puz.solution[i]; })) continue;
+      if (cfg.trap && !pos.some(function (v, i) { return !puz.panes[i].locked && fl[i].indexOf(v) >= 0; })) continue;
+      if (diffCount(render(puz, pos), puz.target) >= cfg.diff && allVisible(puz, pos) && grabOrder(puz, pos)) return pos;
+    }
+    return null;
+  }
+  function buildLevel(N, cfg, seed, deadline, maxAttempts) {
     var rng = mulberry32(hashStr(seed));
-    for (var attempt = 0; attempt < 9000; attempt++) {
+    for (var attempt = 0; attempt < (maxAttempts || 6000); attempt++) {
       if (deadline && (attempt & 63) === 0 && Date.now() > deadline) return null;
       var c = makeCandidate(cfg, rng);
       if (!c) continue;
       if (cfg.panes >= 3 && c.panes.every(function (p) { return p.axis === c.panes[0].axis; })) continue; // mix directions
       if (cfg.colors && cfg.colors.some(function (k) { return !c.panes.some(function (p) { return p.color === k; }); })) continue;
-      var minFits = attempt < 3000 ? cfg.fits : attempt < 6000 ? Math.max(1, cfg.fits - 1) : 1;
-      if (!validateLevel(c, cfg, minFits)) continue;
-      c.start = pickStart(c, rng, cfg.diff);
+      if (!validateLevel(c, cfg)) continue;
+      c.start = pickLevelStart(c, rng, cfg);
       if (!c.start) continue;
+      delete c.fitList;
       c.level = N; c.breather = cfg.breather; c.challenge = cfg.challenge; c.twist = cfg.twist || null; c.flavour = cfg.flavour; c.attempts = attempt + 1;
       return c;
     }
     return null;
   }
-  // Level N is always the same puzzle. If generation runs past its budget (attempts, or the
-  // optional wall-clock deadline on a slow phone), fall back to a seeded, easier tier.
+  // Level N is always the same puzzle (seeded). If a seed runs out of attempts it tries more
+  // seeds at the same difficulty. Only after that does it step down a little, keeping the twist.
   function generateLevel(N, opts) {
     var deadline = opts && opts.ms ? Date.now() + opts.ms : 0;
-    var cfg = levelConfig(N);
-    var lv = buildLevel(N, cfg, "paneslide:level:v1:" + N, deadline);
-    for (var k = 1; !lv && k < 12; k++) {
-      var fb = levelConfig(Math.max(1, Math.floor(cfg.d * Math.pow(0.7, k))));
+    var cfg = levelConfig(N), lv = null;
+    for (var s = 0; !lv && s < 4; s++) {
+      lv = buildLevel(N, cfg, "paneslide:level:v2:" + N + (s ? ":s" + s : ""), deadline);
+      if (deadline && Date.now() > deadline) break;
+    }
+    for (var k = 1; !lv && k < 14; k++) {
+      var fb = levelConfig(N, Math.max(0.5, cfg.e - 0.6 * Math.floor(k / 2)), k);
       fb.breather = cfg.breather; fb.challenge = cfg.challenge;
-      if (cfg.twist === "locked") { fb.locked = true; fb.panes++; } if (cfg.twist === "duo") fb.colors = cfg.colors; if (cfg.twist === "free") fb.free = true; fb.twist = cfg.twist;
-      lv = buildLevel(N, fb, "paneslide:level:v1:" + N + ":fb" + k, 0);
-      if (lv) lv.fallback = k;
+      applyTwist(fb, null, 0); applyTwist(fb, cfg.twist, hashStr("paneslide:lvcfg2:" + N));
+      lv = buildLevel(N, fb, "paneslide:level:v2:" + N + ":fb" + k, 0, 4000);
+      if (lv && k > 1) lv.fallback = Math.floor(k / 2); else if (lv) lv.reshaped = true;
     }
     if (!lv) throw new Error("Could not generate level " + N);
     return lv;
@@ -351,7 +426,7 @@
     BIT: BIT, MASK_NAME: MASK_NAME, EPOCH: EPOCH, SHAPES: SHAPES, DAYS: DAYS,
     generate: generate, tutorial: tutorial, allVisible: allVisible, solve: solve, render: render, rowFeedback: rowFeedback,
     paneCells: paneCells, diffCount: diffCount, curveS: curveS, movable: movable, TWISTS: TWISTS, isChallenge: isChallenge, levelConfig: levelConfig, generateLevel: generateLevel,
-    validateLevel: validateLevel, packLevel: packLevel, unpackLevel: unpackLevel, isBreather: isBreather, puzzleNumber: puzzleNumber, addDays: addDays, parseDate: parseDate
+    validateLevel: validateLevel, ambiguity: ambiguity, effOf: effOf, grabOrder: grabOrder, packLevel: packLevel, unpackLevel: unpackLevel, isBreather: isBreather, puzzleNumber: puzzleNumber, addDays: addDays, parseDate: parseDate
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.PaneEngine = api;

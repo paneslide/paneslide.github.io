@@ -25,10 +25,10 @@ All art, colours, icons and sounds (WebAudio) are original and made in code. The
 ## Levels mode (endless)
 
 - From home, **PLAY** opens the level map and **DAILY** opens the shared puzzle of the day.
-- Levels 1–300 are precomputed in `js/levels.js`, and each one is checked to have exactly one solution. Levels above 300 are built on the device from a fixed seed (`paneslide:level:v1:N`), so every player gets the same level N. A time cap and an easier fallback seed keep generation fast.
-- The board grows from 3×3 to 4×4 to 5×5 and stops at 5×5 around level 23. After that, difficulty comes from other levers: more panes, more overlapping colours, more ways each pane could fit, and new pane shapes. These rise on a gentle log curve that plateaus around level 200, so later levels stay "hard but fair".
-- For variety, each 20-level chapter has its own name and colours. Some levels are easy breathers, every 20th level from 15 is a challenge, and twists appear over time: locked glass (from 30), two-colour levels (from 45) and glass that slides any direction (from 70). Each twist gets a one-line tip the first time it appears.
-- Stars: 3 = solved in par, 2 = within par+2, 1 = solved. Using a hint caps the level at 2 stars.
+- Levels 1–300 are precomputed in `js/levels.js`, and each one is checked to have exactly one solution. Levels above 300 are built on the device from a fixed seed (`paneslide:level:v2:N`), so every player gets the same level N. A time cap and a fallback one notch easier keep generation fast.
+- Difficulty (v2): levels 1–3 are gentle 3×3 lessons, 4×4 starts at level 4 and 5×5 around level 19–25 (the cap). From level 4 every level must be ambiguous: at least one pane has 2+ plausible spots that match the target colours (decoys), and harder levels start panes on a plausible but wrong spot (traps). Panes, decoys and overlaps rise on a curve that plateaus around level 150–200. A sawtooth gives a breather at levels ending in 1 and 6, and a challenge at levels ending in 9. `tools/validate-levels.js` fails any level from 4 up that has no decoy.
+- For variety, each 20-level chapter has its own name and colours, with a mix of layout flavours (bars, corners, blocks, big shapes). Twists: locked glass from 12, two-colour levels from 18, and glass that slides any direction from 33. Each twist gets a one-line tip the first time it appears.
+- Stars: 3 = solved in par (par = the optimal move count, which the generator checks is reachable), 2 = within par+1 (par+2 once par is 4 or more), 1 = solved. Using a hint caps the level at 2 stars. Panes blend with `darken`, so the same colour over itself stays the same colour.
 - Hints: you start with 3 and can hold at most 5. You earn +1 per milestone and +1 for every three 3-star levels.
 - Milestones come at level 5 and every 10 levels. They show a rank badge and your real stats from this device, plus spoiler-free share text.
 - Progress is saved in localStorage (`ps2:levels`).

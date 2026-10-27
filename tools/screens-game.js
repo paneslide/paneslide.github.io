@@ -22,11 +22,33 @@ async function drag(page, pi, to) {
   if (now !== to) throw new Error(`drag pane ${pi} to ${to} landed at ${now}`);
 }
 async function solve(page) {
-  const P = await page.evaluate(() => ({ sol: PS.puzzle.solution, lock: PS.puzzle.panes.map(p => !!p.locked) }));
-  for (let i = 0; i < P.sol.length; i++) if (!P.lock[i]) {
-    const cur = await page.evaluate(k => PS.state.pos[k], i);
-    if (cur !== P.sol[i]) await drag(page, i, P.sol[i]);
-  }
+  // A pane can be hidden under a same-direction pane that was moved later, so pick an order of
+  // moves (like a careful player) in which every pane is still grabbable when its turn comes.
+  const order = await page.evaluate(() => {
+    const E = window.PaneEngine, puz = PS.puzzle, pos = PS.state.pos.slice();
+    const todo = puz.panes.map((p, i) => i).filter(i => !puz.panes[i].locked && pos[i] !== puz.solution[i]);
+    const perms = a => a.length <= 1 ? [a] : a.flatMap((x, k) => perms(a.filter((_, j) => j !== k)).map(r => [x].concat(r)));
+    const at = (P, c) => puz.panes.map((p, i) => i).filter(i => E.paneCells(puz.panes[i], P[i]).some(q => q[0] === c[0] && q[1] === c[1]));
+    for (const ord of perms(todo)) {
+      const P = pos.slice(), z = puz.panes.map(() => 0); let top = 0, ok = true;
+      for (const i of ord) {
+        const p = puz.panes[i], cells = E.paneCells(p, P[i]);
+        const only = cells.filter(c => at(P, c).every(q => q === i || puz.panes[q].locked));
+        const free = cells.filter(c => at(P, c).every(q => q === i || puz.panes[q].locked || (puz.panes[q].axis !== p.axis && puz.panes[q].axis !== "b" && p.axis !== "b")));
+        const c = only[0] || free[0] || cells[0];
+        let want = p.axis;
+        if (p.axis === "b") { const w = p.mc + 1; want = Math.abs(puz.solution[i] % w - P[i] % w) >= Math.abs(Math.floor(puz.solution[i] / w) - Math.floor(P[i] / w)) ? "h" : "v"; }
+        const cands = at(P, c).filter(q => !puz.panes[q].locked).sort((a, b) => z[a] - z[b]);
+        const m = cands.filter(q => puz.panes[q].axis === want || puz.panes[q].axis === "b");
+        if ((m.length ? m : cands).slice(-1)[0] !== i) { ok = false; break; }
+        P[i] = puz.solution[i]; z[i] = ++top;
+      }
+      if (ok) return ord;
+    }
+    return null;
+  });
+  if (!order) throw new Error("no grabbable move order for level " + await page.evaluate(() => PS.puzzle.level));
+  for (const i of order) await drag(page, i, await page.evaluate(k => PS.puzzle.solution[k], i));
 }
 async function run(browser, tag, ctxOpts, full) {
   const ctx = await browser.newContext(Object.assign({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, permissions: ["clipboard-read", "clipboard-write"] }, ctxOpts));
@@ -80,6 +102,7 @@ async function run(browser, tag, ctxOpts, full) {
   await solve(page);
   await page.waitForSelector("#dlgMile[open]", { timeout: 4000 }); await page.waitForTimeout(2400);
   await page.screenshot({ path: out + "game-milestone.png" });
+  await page.waitForTimeout(2200); await page.screenshot({ path: out + "game-milestone-rollover.png" });
   console.log("milestone share:\n" + await page.evaluate(() => PS.mileShareText()));
   console.log("after L10 hints:", await page.evaluate(() => PS.progress.hints));
   await page.click("#btnMileNext"); await page.waitForTimeout(500);
@@ -92,19 +115,23 @@ async function run(browser, tag, ctxOpts, full) {
   });
   await page.goto(base + "?test=1&mode=levels", { waitUntil: "networkidle" }); await page.waitForTimeout(900);
   await page.screenshot({ path: out + "game-map.png" });
-  // twist tip level 30 + locked pane
-  await page.goto(base + "?test=1&level=30", { waitUntil: "networkidle" }); await page.waitForTimeout(800);
-  await page.screenshot({ path: out + "game-level30-tip.png" });
-  // free pane level 70 with patterns via settings
-  await page.goto(base + "?test=1&level=70", { waitUntil: "networkidle" });
+  // twist tip: locked glass arrives at level 12; level 25 is a 5x5 with a trap start
+  for (const L of [12, 19, 25]) {
+    await page.goto(base + "?test=1&level=" + L, { waitUntil: "networkidle" }); await page.waitForTimeout(800);
+    await page.screenshot({ path: out + "game-level" + L + ".png" });
+    await solve(page); await page.waitForSelector("#dlgLevel[open], #dlgMile[open]", { timeout: 4000 });
+    console.log("L" + L + " solved by test, twist:", await page.evaluate(() => PS.puzzle.twist), "par:", await page.evaluate(() => PS.puzzle.panes.filter(p => !p.locked).length));
+  }
+  // free pane intro level 33 with patterns via settings
+  await page.goto(base + "?test=1&level=33", { waitUntil: "networkidle" });
   await page.click("#btnSettings"); await page.waitForTimeout(500);
   await page.click("label:has(#optPatterns)"); await page.waitForTimeout(300);
   await page.screenshot({ path: out + "game-settings.png" });
   await page.keyboard.press("Escape"); await page.waitForTimeout(400);
-  await page.screenshot({ path: out + "game-level70-patterns.png" });
+  await page.screenshot({ path: out + "game-level33-free-patterns.png" });
   await solve(page);
   await page.waitForSelector("#dlgLevel[open], #dlgMile[open]", { timeout: 4000 });
-  console.log("L70 free pane solved: yes");
+  console.log("L33 free pane solved: yes");
   // help + stats
   await page.goto(base + "?test=1", { waitUntil: "networkidle" }); await page.waitForTimeout(400);
   await page.click("#btnHelp"); await page.waitForTimeout(1400);

@@ -121,7 +121,7 @@ main { width: 100%; max-width: 520px; padding: 0 14px 28px; display: flex; flex-
 .goal-ic svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.4; }
 .mini { display: grid; gap: 3px; isolation: isolate; padding: 4px; border-radius: 10px; background: var(--frame2); }
 .mini .c { width: 22px; height: 22px; border-radius: 5px; background: var(--well); position: relative; overflow: hidden; }
-.mini .c .lay { position: absolute; inset: 0; mix-blend-mode: multiply; }
+.mini .c .lay { position: absolute; inset: 0; mix-blend-mode: darken; }
 
 .stage-wrap { position: relative; margin-top: 34px; }
 .tip { position: absolute; left: 50%; top: -5px; transform: translate(-50%, -100%); z-index: 1005; background: #fff; color: var(--ink); font-size: 16px; font-weight: 700; padding: 8px 14px; border-radius: 16px; white-space: nowrap; box-shadow: 0 4px 0 var(--pshadow), 0 10px 20px rgba(20,0,60,.35); pointer-events: none; opacity: 0; transition: opacity .2s; max-width: calc(100vw - 30px); }
@@ -131,7 +131,7 @@ main { width: 100%; max-width: 520px; padding: 0 14px 28px; display: flex; flex-
 .board { position: relative; isolation: isolate; padding: var(--pad); border-radius: 24px; background: linear-gradient(180deg, var(--frame), var(--frame2)); box-shadow: inset 0 3px 0 rgba(255,255,255,.8), inset 0 -3px 0 rgba(0,0,0,.06), 0 7px 0 rgba(20,0,60,.35), 0 18px 30px rgba(20,0,60,.4); touch-action: none; user-select: none; -webkit-user-select: none; }
 .board .wells { display: grid; gap: var(--gap); }
 .board .well { width: var(--cell); height: var(--cell); border-radius: 13px; background: var(--well); box-shadow: inset 0 3px 5px rgba(40,20,90,.12); }
-.pane { position: absolute; left: var(--pad); top: var(--pad); mix-blend-mode: multiply; transition: transform .34s cubic-bezier(.34, 1.5, .64, 1); will-change: transform; cursor: grab; }
+.pane { position: absolute; left: var(--pad); top: var(--pad); mix-blend-mode: darken; /* darken: same colour over same colour stays the same, like the rules */ transition: transform .34s cubic-bezier(.34, 1.5, .64, 1); will-change: transform; cursor: grab; }
 .pane.dragging { transition: none; cursor: grabbing; }
 .pane .g { position: absolute; width: var(--cell); height: var(--cell); border-radius: 13px; background: var(--pc); transition: transform .15s; }
 .pane .g::after { content: ""; position: absolute; inset: 0; border-radius: 13px; background: linear-gradient(140deg, rgba(255,255,255,.6) 0%, rgba(255,255,255,0) 40%); box-shadow: inset 0 -4px 0 rgba(0,0,0,.06); }
@@ -195,7 +195,7 @@ main { width: 100%; max-width: 520px; padding: 0 14px 28px; display: flex; flex-
 
 /* ---------- map ---------- */
 .map { width: 100%; display: flex; flex-direction: column; align-items: center; }
-.path { position: relative; width: 100%; max-width: 380px; display: flex; flex-direction: column-reverse; align-items: center; padding: 20px 0 120px; }
+.path { position: relative; width: 100%; max-width: 380px; display: flex; flex-direction: column-reverse; align-items: center; padding: 20px 0 calc(150px + env(safe-area-inset-bottom)); }
 .road { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
 .road .r1 { fill: none; stroke: rgba(20,0,60,.35); stroke-width: 30; stroke-linecap: round; }
 .road .r2 { fill: none; stroke: rgba(255,255,255,.85); stroke-width: 22; stroke-linecap: round; }
@@ -350,3 +350,7 @@ dialog::backdrop { background: rgba(20, 8, 50, .62); }
 body[data-view=map] .hud { background: linear-gradient(180deg, var(--sky1) 55%, transparent); }
 .cbtn:focus { outline: none; }
 .cbtn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
+.rankbar .fill.snap { transition: none; }
+.rankbar.done .fill { background: linear-gradient(180deg, #B8F27A, #3FB02A); box-shadow: inset 0 3px 0 rgba(255,255,255,.5), 0 0 16px #FFE16A; }
+.rankbar.done .rb-ic { animation: pop .4s ease; }

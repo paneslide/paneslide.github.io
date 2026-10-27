@@ -114,7 +114,7 @@
   }
   function ensureLevels(cb) {
     if (window.PANESLIDE_LEVELS) return cb();
-    var sc = document.createElement("script"); sc.src = "js/levels.js?v=2"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+    var sc = document.createElement("script"); sc.src = "js/levels.js?v=4"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
   }
   function getLevel(N) {
     var D = window.PANESLIDE_LEVELS;
@@ -489,7 +489,7 @@
   function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 1700); }
 
   // ---------- levels: stars, hints, win, milestones, map ----------
-  function starsFor(moves, hinted) { var par = parOf(puz), st = moves <= par ? 3 : moves <= par + 2 ? 2 : 1; return hinted ? Math.min(2, st) : st; }
+  function starsFor(moves, hinted) { var par = parOf(puz), st = moves <= par ? 3 : moves <= par + (par >= 4 ? 2 : 1) ? 2 : 1; return hinted ? Math.min(2, st) : st; } // 3 = optimal (one slide per pane), 2 = 1-2 extra slides
   function misplaced() { return puz.panes.filter(function (p, i) { return state.pos[i] !== puz.solution[i]; }).length; }
   var STAR = '<svg viewBox="0 0 24 24"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>';
   function starsHTML(k, cls) { var h = ""; for (var i = 0; i < 3; i++) h += "<i class='st" + (i < k ? " on" : "") + (cls ? " " + cls : "") + "' style='--i:" + i + "'>" + STAR + "</i>"; return h; }
@@ -566,7 +566,20 @@
     var h = chipHTML("star", totalStars()) + (prog.perf > 0 ? chipHTML("spark", prog.perf) : "") + chipHTML("bulb", prog.hints) + (gained.length ? chipHTML("bulb", "+" + gained.length, "plus") : "");
     $("mileStats").innerHTML = h;
     $("dlgMile").showModal();
-    setTimeout(function () { $("rankFill").style.width = Math.max(6, pct) + "%"; }, 30);
+    var fill = $("rankFill");
+    if (newRank) { // fill the bar for the rank just reached, then roll over to the next one
+      $("rankNext").innerHTML = "<i class='ico medal'></i>" + N;
+      setTimeout(function () { fill.style.width = "100%"; }, 30);
+      setTimeout(function () {
+        if (!$("dlgMile").open) return;
+        $("rankBar").classList.add("done"); sfx.star(2);
+        setTimeout(function () {
+          fill.classList.add("snap"); fill.style.width = "0%"; $("rankBar").classList.remove("done");
+          $("rankNext").innerHTML = "<i class='ico medal'></i>" + (next ? next[0] : "");
+          void fill.offsetWidth; fill.classList.remove("snap"); fill.style.width = Math.max(6, pct) + "%";
+        }, 700);
+      }, 2100);
+    } else setTimeout(function () { fill.style.width = Math.max(6, pct) + "%"; }, 30);
     setTimeout(function () { sfx.medal(); buzz([15, 40, 15]); confetti(true); }, 550);
   }
   function renderMap() {
