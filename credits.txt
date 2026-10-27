@@ -1,0 +1,6 @@
+PaneSlide credits and licences
+
+Code, graphics, logo, favicon, sounds: original work made for PaneSlide (2026). Sounds are synthesised at runtime with the Web Audio API; no audio files are used.
+Fonts: none bundled. The game uses the visitor's system font (ui-rounded / system-ui).
+Emoji in the share text are standard Unicode characters rendered by the visitor's device.
+Third-party code: none.
