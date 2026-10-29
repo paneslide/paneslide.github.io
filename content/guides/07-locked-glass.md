@@ -66,3 +66,5 @@ From level 25 you will meet [stone pillars](/guides/stone-pillars/). Both never 
 So a pillar blocks everything, while locked glass only blocks one rail and acts as a sticking point for the other. Knowing that difference is the key to the mixed boards in later chapters.
 
 Ready to try? Open the [level map](/?mode=levels) and play from level 12, or read about the other glass in the [guides](/guides/).
+
+Locked glass is also the star of the first boss, at level 20. See [Sunroom and Greenhouse tips](/guides/chapters-sunroom-greenhouse/) and [boss levels](/guides/boss-levels/).

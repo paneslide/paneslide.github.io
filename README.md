@@ -19,7 +19,8 @@ Pages (all generated from Markdown in `content/` by `node tools/build-site.js --
 |---|---|
 | `/` | the game, plus a short intro, guide links and footer below the fold |
 | `/how-to-play/` | full illustrated rules: glide, stick, mixing, par and stars, all 9 kinds of glass, chapters, daily, hints, shards, settings, keyboard |
-| `/guides/` + 19 guides | original articles with diagrams drawn from the real board renderer (`tools/site/figures.js`) |
+| `/guides/` + 39 guides | original articles (600–1200 words each) in 8 groups: Start here, Strategy, Every kind of glass, Chapter by chapter, Colour and light, Play anywhere, Puzzle world, Puzzles and you. Diagrams are drawn from the real board renderer (`tools/site/figures.js`). On screens ≥1100px wide, guides get a ~70ch column plus a sticky side panel ("On this page" + other guides in the same group) |
+| `/whats-new/` | changelog, newest first (edit `content/pages/whats-new.md` with every release) |
 | `/archive/` | calendar of past dailies; `/?date=YYYY-MM-DD` plays one as practice (no streak or stats change); future days are locked |
 | `/about/`, `/contact/`, `/privacy/`, `/terms/` | trust pages; contact is paneslide.game@gmail.com (written as HTML entities to slow scrapers, still a normal mailto link) |
 | `/404.html`, `sitemap.xml`, `robots.txt`, `manifest.webmanifest`, `sw.js` | generated |
@@ -32,14 +33,34 @@ Every page has a title, description, canonical URL, Open Graph/Twitter card (`im
 SITE_URL: "https://paneslide.github.io",   // change when a custom domain is added, then rebuild
 CONTACT_EMAIL: "paneslide.game@gmail.com",
 ADS_ENABLED: false,  ADSENSE_CLIENT: "",  ADSENSE_SLOTS: {...},   // ads stay OFF until approval
-ANALYTICS_ENABLED: false,  GOATCOUNTER_CODE: "",                 // GoatCounter, OFF
-GSC_VERIFICATION: "",                                            // Search Console meta tag content
+ANALYTICS_ENABLED: true,  GOATCOUNTER_CODE: "paneslide",         // GoatCounter, ON since 29 Oct 2026 (7:42 PM IST)
+GSC_VERIFICATION: "7S4GQ…zVE",                                   // Search Console meta tag content (on every page)
 ```
 
 After any change run `node tools/build-site.js --check`, then commit and push.
 
 - **Ads:** slots are `<div class="ad-slot" data-slot="…">` spaces inside guide articles and in the home intro below the game, never on or over the board. Nothing loads while `ADS_ENABLED` is false (or `ADSENSE_CLIENT` is not a `ca-pub-…` id). A consent hook (`window.PaneSlideConsent`, fed by `googlefc`) is there for Google's certified CMP (Funding Choices), which AdSense offers free for EEA/UK visitors. After AdSense approval, add a file `ads.txt` at the site root containing one line: `google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0` (your own publisher id). `ads.txt` only works at a domain root, which is one reason AdSense needs a custom domain rather than `github.io`.
-- **GoatCounter (free, cookie-free analytics):** sign up at goatcounter.com, choose a code (e.g. `paneslide`), put it in `GOATCOUNTER_CODE`, set `ANALYTICS_ENABLED: true`, rebuild, push. The privacy page already describes it.
+- **GoatCounter (free, cookie-free analytics): ON.** Dashboard: https://paneslide.goatcounter.com (log in with the owner's GoatCounter account). To switch off, set `ANALYTICS_ENABLED: false`, rebuild, push. It never loads when the browser sends Do Not Track or Global Privacy Control, on localhost/127.*, or with `?test=1`.
+
+### Game events (v10, `js/site.js` + `js/game.js`)
+
+Anonymous GoatCounter *events* (`event:true`, shown in the dashboard as paths starting `event/`). No IDs, no progress, no free text. The game pushes into `window.psq`; `site.js` batches them (sent 4 s after the last one, or at once when the tab is hidden/closed), sends each distinct path **once per browser session** (sessionStorage `ps-ev`), and caps a session at 60 events. With `?test=1` nothing is sent; events are copied to `window.psLog` for tests.
+
+| Event path | When |
+|---|---|
+| `level/NNN/start` | a level is opened (NNN = 001…) |
+| `level/NNN/complete/<s>star/<par\|par+N>/hints<n>/undo<n>/<time>` | solved in exactly par → `complete`; more swipes → `over-par` (`level/NNN/over-par/...`). hints capped at 5, undo at 9. time: under-30s, 30-60s, 1-2min, 2-5min, 5min-plus |
+| `level/NNN/quit`, `level/NNN/restart` | left mid-level (back, map, home, closed the tab) or restarted |
+| `mechanic/<kind>/first-seen` | first time a player reaches a teach level (locked, duo, pillar, gem, ice, sand, oneway, frost, mystery) |
+| `tutorial/start`, `tutorial/skip`, `tutorial/complete` | first-run tutorial funnel |
+| `daily/start`, `daily/solve/<par\|par+N>/<time>` | today's daily |
+| `archive/play/<age>`, `archive/solve/...` | an archive day (age: 1-day, 2-7-days, 8-30-days, 31-days-plus) |
+| `gift/claim/dayN`, `shop/buy/hint`, `shop/buy/skin-<k>`, `shop/buy/mood-<k>` | economy |
+| `music/on`, `music/mute` | music switch changed |
+| `app/install-button`, `app/installed` | PWA install |
+| `guide/<slug>/read-75` | a reader scrolled 75% of a guide |
+
+**Reading the funnel:** in the GoatCounter dashboard, filter paths by `event/level/012/` to see one level: compare `start` with `complete` + `over-par` + `quit`. Levels where `over-par` or `quit` is high are the hardest; `mechanic/*/first-seen` shows how far players get; `daily/start` vs `daily/solve` and `archive/play` show daily habits; `tutorial/start` vs `tutorial/complete`/`skip` shows first-run drop-off. Counts are per session (roughly unique visitors), not raw plays. Privacy Policy lists every event.
 - **Google Search Console:** add the URL-prefix property `https://paneslide.github.io/`, choose "HTML tag", copy only the `content="..."` value into `GSC_VERIFICATION`, rebuild, push, press Verify, then submit `sitemap.xml`.
 
 ## Roadmap (not built yet)
@@ -99,6 +120,13 @@ Twin panes (two panes that move together), portals, paint cells (recolour a pane
   - **Next unlock**: the map bar and the level-end card always say what comes next ("8 levels to Mystery picture" or "5 to the boss · window 15/20").
 - Progress is saved in localStorage under the same `ps2:*` keys as before, so old progress stays valid.
 
+## Desktop and keyboard (v10)
+
+- At ≥960×560 (landscape) the game switches to a 3-column layout: target + meter + buttons on the left, a larger board in the centre, a **Controls** panel (`aside.keys` in index.html) on the right. Home: hero left, actions card right. 768×1024 portrait uses a bigger single column. Phones are unchanged.
+- Keyboard: Tab / 1–9 pick a pane, arrows or WASD slide it, Enter = next movable pane, Z or Ctrl/⌘+Z undo, H hint, M music, Esc closes a dialog. Shortcuts pause while a dialog is open or a text box has focus.
+- Mouse: hover rim on movable panes, grab/grabbing cursors.
+- Every dialog wraps its content in `.pscroll`, so the ribbon title and ✕ stay put and only the content scrolls (fixes the clipped Stats header). The Stats "moves over par" chart is a labelled bar list.
+
 ## Tests (Node 20)
 
 - `node tools/validate.js 2026-10-28 367` checks every daily and the tutorial: exactly one solution, par = shortest path, and deterministic output. It also reports how many dailies greedy fails.
@@ -121,6 +149,9 @@ Twin panes (two panes that move together), portals, paint cells (recolour a pane
   - it needs `python3 -m http.server 8765` running in this folder, and Firefox via `npx playwright-core install firefox`.
 - `node tools/build-site.js --check` rebuilds the website pages and fails if a guide is outside 600–1200 words.
 - `PW=$(npm root -g)/playwright-core node tools/test-site.js` opens every sitemap page plus the 404 in Chromium light/dark/forced dark and Firefox dark at 360×740 and 412×915 (`ONLY=` picks one). It fails on console errors, HTTP errors, sideways overflow, broken images, missing alt text, unlabeled SVGs, more than one h1, and duplicate titles/descriptions. It also checks the archive rules (future dates locked, past dates are practice and leave stats alone) and the progress-code round trip.
+- `ONLY=desktop` in test-site.js runs every page in Chromium light and dark at 768×1024, 1280×800, 1440×900 and 1920×1080.
+- `PW=... node tools/check-popups.js` opens every dialog at phone, tablet and desktop sizes and fails if the ribbon or ✕ is clipped or content overflows (screenshots `screenshots/popup-stats-*.png`).
+- `PW=... node tools/test-events.js` plays the tutorial, a level (also by keyboard: 1–9, arrows, Z, H, M), a quit, gift, shop, daily and archive in test mode and checks the event list; then, on a fake host with a stubbed count.js, checks batching, the `event/` prefix, once-per-session dedupe and that GPC sends nothing.
 - `node tools/check-links.js [--external]` checks every internal link and #anchor in the built HTML (and optionally the outside links).
 - `PW=... node tools/make-icons.js` redraws the app icons and `img/og.png`; `PW=... node tools/screens-site.js` and `tools/capture-guides.js` make the website screenshots.
 - `node tools/darkreader-check.js` checks two things: that Dark Reader honours the lock, and that the canvas board keeps its colours even when the lock is removed. It needs `npm i --prefix /tmp/dr darkreader@4`.

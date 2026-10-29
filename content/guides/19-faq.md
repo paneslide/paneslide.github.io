@@ -82,15 +82,15 @@ After your first visit, the game is saved by your browser, so you can keep playi
 
 ### Can I install it like an app?
 
-Yes. On Android and on desktop Chrome or Edge, look for "Install app" in Settings or your browser's menu. On iPhone and iPad, open the game in Safari, tap Share, then "Add to Home Screen".
+Yes. On Android and on desktop Chrome or Edge, look for "Install app" in Settings or your browser's menu. On iPhone and iPad, open the game in Safari, tap Share, then "Add to Home Screen". Step-by-step help is in [install, offline and progress](/guides/install-offline-progress/).
 
 ### I'm colour-blind. Can I still play?
 
-Yes. Turn on **Patterns** in Settings. Each glass colour then gets its own texture, on the board and in the target picture, so mixes can be told apart by pattern as well as by colour.
+Yes. Turn on **Patterns** in Settings. Each glass colour then gets its own texture, on the board and in the target picture, so mixes can be told apart by pattern as well as by colour. The [colour vision guide](/guides/colour-vision/) explains more.
 
 ### Can I play with a keyboard or screen reader?
 
-Yes. Use Tab to move between panes and the arrow keys to slide the selected pane. Each pane has a spoken label, such as its colour and which way it slides.
+Yes. Pick a pane with Tab or the number keys 1 to 9, then slide it with the arrow keys or W A S D. Enter picks the next pane, Z undoes, H gives a hint and M turns music on or off. Each pane has a spoken label, such as its colour and which way it slides. See [keyboard and mouse controls](/guides/keyboard-and-mouse/) and [accessibility](/guides/accessibility/).
 
 ### Can I turn off the music or vibration?
 

@@ -76,3 +76,5 @@ Daily puzzles work best as a small, regular thing:
 Your daily results, streak and settings are stored **only on your device**, in your browser's local storage. There is no account and nothing about your play is sent to us. If you want to move your progress to another phone, use **Progress code** in Settings. See the [privacy policy](/privacy/) for details.
 
 [Play today's daily](/?mode=daily).
+
+Solving each day's puzzle also earns shards. See [shards, gifts and the Shop](/guides/shards-gifts-shop/).

@@ -56,6 +56,8 @@ PaneSlide keeps the sliding-puzzle traditions and changes three things:
 
 Like modern puzzle-makers, PaneSlide uses a computer to check every puzzle: each level and daily has exactly one answer, and its par is the proven minimum number of swipes. It's the same question Johnson and Story answered with pencil and paper in 1879, can this position be reached, now answered by a computer search before you ever see the puzzle.
 
+For how PaneSlide compares with Sokoban, Sudoku and nonograms, read [puzzle types compared](/guides/puzzle-types-compared/), and for slide-until-it-stops games such as Ricochet Robots, see [glide puzzles](/guides/glide-puzzles/).
+
 ## Sources
 
 - Wikipedia, "15 puzzle" (history section citing Slocum & Sonneveld, *The 15 Puzzle*, 2006; Johnson & Story, *American Journal of Mathematics*, 1879), checked 29 October 2026.

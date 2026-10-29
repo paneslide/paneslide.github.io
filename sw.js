@@ -6,7 +6,7 @@
    - old caches are deleted on activate;
    - pages (HTML) are network-first, so an online visit always gets the latest page;
    - versioned files (?v=) and fonts/icons are cache-first, because their URL changes when they change. */
-const VERSION = "ps-4467d20d05";
+const VERSION = "ps-2391f158a9";
 const PRECACHE = [
  "/",
  "/index.html",
@@ -44,8 +44,29 @@ const PRECACHE = [
  "/guides/puzzles-and-relaxation/",
  "/guides/history-of-sliding-puzzles/",
  "/guides/faq/",
+ "/guides/chapters-sunroom-greenhouse/",
+ "/guides/chapters-lighthouse-tea-garden/",
+ "/guides/chapters-lantern-market-lavender-loft/",
+ "/guides/chapters-desert-dunes-snow-cabin/",
+ "/guides/boss-levels/",
+ "/guides/beginner-mistakes/",
+ "/guides/advanced-strategy/",
+ "/guides/how-puzzles-are-made/",
+ "/guides/colour-wheels-primaries/",
+ "/guides/why-glass-is-coloured/",
+ "/guides/stained-glass-history/",
+ "/guides/colour-vision/",
+ "/guides/install-offline-progress/",
+ "/guides/keyboard-and-mouse/",
+ "/guides/accessibility/",
+ "/guides/puzzle-types-compared/",
+ "/guides/glide-puzzles/",
+ "/guides/shards-gifts-shop/",
+ "/guides/house-ranks-badges/",
+ "/guides/glossary/",
  "/archive/",
  "/about/",
+ "/whats-new/",
  "/contact/",
  "/privacy/",
  "/terms/"

@@ -64,6 +64,8 @@ Bright screens late at night aren't ideal for everyone. If a puzzle keeps your m
 
 Games should add to your day. If you find you're playing far more than you want to, or it's affecting sleep, work or relationships, take a break, and talk to someone you trust or a professional if you're worried. In the UK, the NHS website lists mental health services; in India, the government's free, 24-hour Tele-MANAS helpline is 14416 (or 1-800-891-4416).
 
+PaneSlide's calm design also includes accessibility settings such as Patterns, reduced motion and sound switches. See [accessibility in PaneSlide](/guides/accessibility/).
+
 ## Sources
 
 - NHS, "5 steps to mental wellbeing", nhs.uk (checked 29 October 2026): [nhs.uk/mental-health/self-help/guides-tools-and-activities/five-steps-to-mental-wellbeing](https://www.nhs.uk/mental-health/self-help/guides-tools-and-activities/five-steps-to-mental-wellbeing/)

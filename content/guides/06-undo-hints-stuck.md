@@ -56,3 +56,5 @@ In levels, the restart button puts every pane back to the start and resets your 
 - **Forgetting a special cell.** Ice stops sticking and sand adds stops. Check the small badges on the board.
 
 Being stuck is part of puzzles, not a failure. The moment it clicks is the best part of the game.
+
+If the same kinds of mistakes keep happening, [seven beginner mistakes](/guides/beginner-mistakes/) lists the common ones and how to fix them.

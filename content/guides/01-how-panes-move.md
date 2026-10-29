@@ -65,3 +65,5 @@ From level 25 onwards, new kinds of cells and glass bend these rules in small, p
 ## Practise the rules
 
 The first three levels in Levels mode are short lessons: level 1 is about gliding, level 2 about sticking, and level 3 about order. If you skipped them, replay them from the map. Then try today's [daily puzzle](/?mode=daily) and, before every swipe, say out loud where you think the pane will stop. You will be surprised how quickly your guesses become right.
+
+Curious where the glide idea comes from? Read [glide puzzles](/guides/glide-puzzles/), and if you are just starting, [seven beginner mistakes](/guides/beginner-mistakes/) will save you a lot of swipes.

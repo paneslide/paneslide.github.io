@@ -35,7 +35,7 @@ You always get at least one star for solving. There is no way to fail a level by
 
 ## Perfect solves
 
-Solve in exactly par and the game shows **✨ Perfect!** Your records in Stats show how many levels you have solved perfectly, and your "Best perfect run": the most three-star levels you have cleared in a row. The first time you solve a level perfectly you also earn bonus shards.
+Solve in exactly par and the game shows **✨ Perfect!** Your records in Stats show how many levels you have solved perfectly, and your "3★ run": the most three-star levels you have cleared in a row. The first time you solve a level perfectly you also earn bonus shards.
 
 ## What stars and shards are for
 
@@ -64,3 +64,5 @@ Undo takes back your last swipe on the board, but the swipe still counts. This k
 ## Why the scoring is generous on purpose
 
 PaneSlide is meant to be calm. Three stars for par + 1 means one slip does not spoil a good solve, and perfect solves are a bonus rather than the only way to feel good. If you want a challenge, chase ✨ Perfect on every level. If you want to relax, three stars come often, and every solve counts.
+
+Stars also earn shards, which you can spend in the Shop. See [shards, gifts and the Shop](/guides/shards-gifts-shop/) and [the House, ranks and badges](/guides/house-ranks-badges/).

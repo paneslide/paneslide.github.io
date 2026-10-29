@@ -59,3 +59,5 @@ After each swipe, glance at the board and the target again. If a pane did not st
 ## Practise on harder days
 
 Daily puzzles get harder through the week: par is 4 on Monday, 5 on Tuesday and Wednesday, 6 on Thursday and Friday, and 7 at the weekend. Friday and weekend dailies are also chosen so that the obvious "fix the most cells now" approach does not reach par. They are the perfect place to practise this routine. Try the [daily puzzle](/?mode=daily), or pick a past weekend from the [archive](/archive/) for some no-pressure practice.
+
+Ready for more? [Advanced strategy](/guides/advanced-strategy/) covers counting swipes, building stoppers and the boss-level mindset.

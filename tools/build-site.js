@@ -62,7 +62,7 @@ function header(cur) {
 <nav class="s-nav" aria-label="Main">${NAV.map(n => `<a href="${n[0]}"${n[2] ? ` class="${n[2]}"` : ""}${cur && cur === n[0] ? ' aria-current="page"' : ""}>${n[1]}</a>`).join("")}</nav></header>`;
 }
 function footer() {
-  return `<footer class="s-foot"><nav aria-label="Footer">${[["/", "Play"], ["/?mode=daily", "Daily puzzle"], ["/archive/", "Archive"], ["/guides/", "Guides"], ["/how-to-play/", "How to play"], ["/about/", "About"], ["/privacy/", "Privacy Policy"], ["/terms/", "Terms of Use"], ["/contact/", "Contact"]].map(a => `<a href="${a[0]}">${a[1]}</a>`).join("")}</nav>
+  return `<footer class="s-foot"><nav aria-label="Footer">${[["/", "Play"], ["/?mode=daily", "Daily puzzle"], ["/archive/", "Archive"], ["/guides/", "Guides"], ["/how-to-play/", "How to play"], ["/whats-new/", "What's new"], ["/about/", "About"], ["/privacy/", "Privacy Policy"], ["/terms/", "Terms of Use"], ["/contact/", "Contact"]].map(a => `<a href="${a[0]}">${a[1]}</a>`).join("")}</nav>
 <p>PaneSlide is a free colour-glass sliding puzzle. No sign-up, no downloads; your progress stays on your device.</p>
 <p>© 2026 PaneSlide · ${EMAIL ? emailLink() : '<a href="/contact/">Contact</a>'}</p>
 <button type="button" class="s-btn purple" data-install hidden>📲 Install the app</button></footer>`;

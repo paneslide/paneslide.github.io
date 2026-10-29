@@ -67,3 +67,5 @@ Because the mixing is predictable, the target picture is a map:
 - **Black** means three panes overlap there, which is the rarest and most useful clue on a board.
 
 The next guide, [reading the target picture](/guides/reading-the-picture/), turns these facts into a step-by-step method. If you find some colours hard to tell apart, switch on **Patterns** in Settings: each glass colour gets its own pattern, so mixes can be read by shape as well as colour.
+
+For the history behind the three sets of primary colours, read [primary colours: RYB, RGB and CMY](/guides/colour-wheels-primaries/). For the chemistry of real glass, see [why glass is coloured](/guides/why-glass-is-coloured/).

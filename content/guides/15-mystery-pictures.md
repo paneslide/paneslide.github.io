@@ -60,3 +60,5 @@ Hints work as normal: the gold hint button shows the next best swipe from your c
 Mystery pictures are the last of the nine special kinds taught in Levels mode. By level 95 you have learned to read the picture very well. Mystery levels ask you to do it with less, to trust the rules you know, and to make confident moves before the whole answer is clear. Beat chapter 5's boss at level 100 and mystery pictures will keep appearing in later chapters alongside the other kinds.
 
 Play from level 95 on the [level map](/?mode=levels).
+
+Mystery pictures arrive at level 95, in the Lantern Market. See [Lantern Market and Lavender Loft tips](/guides/chapters-lantern-market-lavender-loft/).
