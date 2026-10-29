@@ -19,14 +19,23 @@ Static site: no build step, no server, no accounts. To host it, publish this fol
 ## Levels mode (endless)
 
 - From home, **PLAY** opens the level map and **DAILY** opens the puzzle of the day. On the map, the PLAY button sits in a solid bar docked at the bottom. The map is padded by the bar's measured height plus the safe area, so no level node is hidden under it.
-- Levels 1–1000 are precomputed in `js/levels.js`. Levels above 1000 are built on the device from a fixed seed (`paneslide:level:v3:N`), so every player gets the same level N.
-- Difficulty (v3):
+- Levels 1–1000 are precomputed in `js/levels.js`. Levels above 1000 are built on the device from a fixed seed (`paneslide:level:v4:N`), so every player gets the same level N.
+- Difficulty (v4). The goal is enjoyment and coming back, not walls:
   - Levels 1–3 are quick lessons (glide, stick, order).
-  - From level 4, par rises on a log curve that plateaus at about 9 swipes around levels 150–200. Boards are at most 5×5.
-  - A sawtooth gives a breather at levels ending in 1 and 6, and a challenge at levels ending in 9.
-  - From level 6, every non-breather level must defeat a "greedy" player, one who always makes the move that fixes the most cells: greedy cannot finish in par.
-  - Twists: locked glass (a stopper) from level 12, and two-colour levels from 18.
-- Stars: 3 = solved in par, 2 = within par+1 (par+2 once par is 4 or more), 1 = solved. Using a hint caps the level at 2 stars. A hint shows the next best swipe.
+  - From level 4, par rises gently: 2.6 + ln(N−2), capped at 7.6. That gives about 4 swipes by level 6, 5 by level 15, 6 by level 40, and about 7 from level 100. Boards are at most 5×5.
+  - In every block of 10, levels ending in 1 and 6 are breathers, and levels ending in 9 are a little harder (trophy on the map).
+  - Breathers and levels ending in 2 must be solvable by the obvious moves (a "greedy" player), so wins come often.
+  - Only the "aha" levels must defeat the greedy player, so the tricky ones are spaced out. These are the levels ending in 4 and 9 (from level 7), and in 7 (from level 40). Other levels come as they are.
+  - Twists: locked glass (a stopper, shown with metal bolts) from level 12, and two-colour levels from 18.
+  - Dailies (glide rules from 2026-10-30) run par 4 on Monday, 5 on Tuesday and Wednesday, 6 on Thursday and Friday, and 7 at the weekend. The weekend dailies (and Friday's) must defeat greedy.
+- Stars (generous): 3 stars when you solve within par + 1 (exactly par when par is 1–2). 2 stars when you solve within par + max(3, ⌈par/2⌉+1). Otherwise 1 star. Solving in exactly par shows "✨ Perfect!". Hints never cost stars, and a hint shows the next best swipe.
+- Next-gift bar: the level-end card shows a 🎁 bar counting down to the next milestone (level 5, then every 10). Each milestone gives +1 hint and a rank step.
+- Coach marks: the first time a player meets something new, a short tip points at it. Each tip has an icon, one sentence, and a pulsing ring, and a tap closes it. Tips cover glide, stick, order, stars/par, undo, hint, stuck, locked glass, two colours, challenge, breather, map, rank, gift, music, and daily. Each shows once (`ps2:prefs.marks`), and **TIPS** in the ? help shows them all again.
+- Glass look: everything is drawn on one canvas, so Dark Reader and forced dark can't recolour it. Empty cells are recessed slots. Each pane is one raised piece with a bright top-left rim, a darker bottom-right rim, a glossy diagonal streak, a drop shadow, and a soft shimmer every few seconds. Overlapping panes still mix like real colour filters (multiply-style "darken" on a separate glass layer). The target picture is flat colour, so it never looks like the board.
+- Background music: made live in the browser with Web Audio, with no audio files and nothing to license.
+  - It is a calm "puzzle café" style at about 70 bpm: soft detuned chord pads wander at random between Cmaj7, Am7, Fmaj7, G6, Dm9, and Em7. On top sit a sparse marimba-like pentatonic melody, an occasional bell, and a generated reverb. Every bar is chosen at random, so it never repeats as a loop.
+  - It is on by default at 18% volume and starts only after the first tap (autoplay rules). It fades out when the tab is hidden.
+  - Mute it with the ♪ button on the home screen, or use the Music toggle and volume slider in Settings. Music is separate from sound effects (`ps2:prefs.music`, `ps2:prefs.musicVol`).
 - Hints: you start with 3 and can hold at most 5. You earn +1 per milestone and +1 for every three 3-star levels.
 - Progress is saved in localStorage under the same `ps2:*` keys as before, so old progress stays valid.
 

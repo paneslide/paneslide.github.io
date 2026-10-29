@@ -392,7 +392,7 @@
         var pos = t.decode(list[q]);
         if (diffCount(render(c, pos), c.target) < (cfg.diff || 2)) continue;
         tries++;
-        if (cfg.greedy && greedySolves(c, pos, ds[k])) continue;
+        if (cfg.greedy === "solve" ? !greedySolves(c, pos, ds[k]) : cfg.greedy && greedySolves(c, pos, ds[k])) continue; // "solve": an easy one, the obvious moves work
         return { pos: pos, par: ds[k] };
       }
     }
@@ -413,19 +413,19 @@
   // Daily puzzles switch to the glide rules from this date; earlier dates stay as they were.
   var GLIDE_FROM = "2026-10-30";
   var GLIDE_DAYS = { // by weekday, 0 = Sunday. Calm Monday, toughest at the weekend.
-    1: { n: 4, panes: 3, dup: 1, shapes: ["I2", "I3", "L3"], par: 5, mixed: 2, greedy: false, label: "Monday" },
-    2: { n: 5, panes: 4, dup: 1, shapes: ["I2", "I3", "L3", "O4"], par: 6, mixed: 3, greedy: true, label: "Tuesday" },
-    3: { n: 5, panes: 4, dup: 1, shapes: ["I3", "L3", "L4", "T4", "O4"], par: 7, mixed: 3, greedy: true, label: "Wednesday" },
-    4: { n: 5, panes: 4, dup: 2, shapes: ["I2", "I3", "L3", "O4", "T4"], par: 7, mixed: 3, greedy: true, label: "Thursday" },
-    5: { n: 5, panes: 5, dup: 2, shapes: ["I2", "I3", "L3", "O4"], par: 8, mixed: 4, greedy: true, label: "Friday" },
-    6: { n: 5, panes: 5, dup: 2, shapes: ["I2", "I3", "L3", "O4", "T4"], par: 9, mixed: 4, greedy: true, label: "Saturday" },
-    0: { n: 5, panes: 5, dup: 2, shapes: ["I2", "I3", "L3", "L4", "O4"], par: 9, mixed: 4, greedy: true, label: "Sunday" }
+    1: { n: 4, panes: 3, dup: 1, shapes: ["I2", "I3", "L3"], par: 4, mixed: 2, greedy: "solve", label: "Monday" },
+    2: { n: 4, panes: 3, dup: 1, shapes: ["I2", "I3", "L3", "O4"], par: 5, mixed: 2, greedy: false, label: "Tuesday" },
+    3: { n: 5, panes: 4, dup: 1, shapes: ["I2", "I3", "L3", "O4"], par: 5, mixed: 3, greedy: false, label: "Wednesday" },
+    4: { n: 5, panes: 4, dup: 1, shapes: ["I2", "I3", "L3", "O4", "T4"], par: 6, mixed: 3, greedy: false, label: "Thursday" },
+    5: { n: 5, panes: 4, dup: 2, shapes: ["I2", "I3", "L3", "O4"], par: 6, mixed: 3, greedy: true, label: "Friday" },
+    6: { n: 5, panes: 5, dup: 2, shapes: ["I2", "I3", "L3", "O4", "T4"], par: 7, mixed: 4, greedy: true, label: "Saturday" },
+    0: { n: 5, panes: 5, dup: 2, shapes: ["I2", "I3", "L3", "L4", "O4"], par: 7, mixed: 4, greedy: true, label: "Sunday" }
   };
   function generateGlideDaily(dateStr) {
     var base = GLIDE_DAYS[parseDate(dateStr).getUTCDay()], c = null;
     for (var k = 0; k < 6 && !c; k++) { // step the target down one swipe per round if a seed is stubborn
       var cfg = {}; for (var x in base) cfg[x] = base[x];
-      cfg.par = Math.max(4, base.par - Math.floor(k / 2)); cfg.lo = cfg.par; cfg.hi = cfg.par; cfg.diff = 3;
+      cfg.par = Math.max(3, base.par - Math.floor(k / 2)); cfg.lo = cfg.par; cfg.hi = cfg.par; cfg.diff = 3;
       c = buildGlide(cfg, "paneslide:v3:" + dateStr + (k ? ":" + k : ""), 0, 1500);
     }
     if (!c) throw new Error("Could not generate puzzle for " + dateStr);
@@ -433,24 +433,31 @@
     return c;
   }
 
-  // ================= Levels mode (v3) =================
+  // ================= Levels mode (v4: gentle, rewarding) =================
   // Par (swipes) per level: 1, 2, 3 for the three lesson levels, then
-  //   2.3 + 1.35 * ln(N - 2), capped at 9.4 (reached around level 195): 3 at level 4, 5 at 8,
-  //   6 at 13-20, 7 at 30, 8 at 50-100, 9 from about 150.
-  // Inside every block of 10: breathers (x1, x6) are 1-2 swipes easier, x5 and x9 (challenge,
-  // trophy on the map) 1-1.5 harder, up to 12.
+  //   2.6 + 1.0 * ln(N - 2), capped at 7.6 (reached around level 150): 3 at level 4, 4 at 6-10,
+  //   5 at 13-30, 6 at 40-90, 7 from about 100.
+  // Inside every block of 10: breathers (x1, x6) are 1-2 swipes easier and must be solvable by the
+  // obvious moves; x9 (challenge, trophy on the map) is about 1 harder.
+  // Only "aha" levels (x4 and x9 from level 7, and x7 from level 40) must beat the greedy player;
+  // x2 levels (from 12) are also "satisfying" ones the obvious moves solve; the rest are left as
+  // they come (some tricky, many just satisfying).
   // Board grows with par: 3x3 -> 4x4 -> 5x5 (never bigger). Twists: locked glass (a fixed stopper)
-  // from 12, two-colour levels from 18. From level 6 every non-breather must beat the greedy player.
+  // from 12, two-colour levels from 18.
   var FLAVOURS = { mix: ["I2", "I3", "L3", "O4"], bars: ["I2", "I3"], corners: ["L3", "L4", "T4", "I2"], blocks: ["O4", "S4", "T4", "I2", "L3"], tiny: ["I2", "L3"] };
   var TWISTS = { locked: 12, duo: 18 };
-  var SAWP = [0, -1.5, -0.5, 0, 0.5, 1, -1.5, 0, 0.5, 1.5]; // by N % 10, from level 11
+  // v4 (gentler, for enjoyment): par 3 at level 4, about 5 by 15, 6 by 40, levelling off at
+  // about 7-8 from level ~150. Breathers (levels ending 1 and 6) are easy on purpose; "aha"
+  // levels (ending 4 and 9, plus 7 from level 40) are the only ones that must beat the greedy player.
+  var SAWP = [0, -1.5, -0.5, 0, 0.5, 0, -1.5, -0.5, 0, 1]; // by N % 10, from level 11
   function isBreather(N) { return N > 10 && (N % 10 === 1 || N % 10 === 6); }
   function isChallenge(N) { return N >= 9 && N % 10 === 9; }
-  function curveS(N) { return N <= 3 ? N : Math.min(9.4, 2.3 + 1.35 * Math.log(N - 2)); }
-  function effOf(N) { if (N <= 3) return N; var t = curveS(N); if (N >= 11) t += SAWP[N % 10]; else if (N === 9) t += 1; return Math.max(3, Math.min(12, Math.round(t))); }
+  function isAha(N) { var d = N % 10; return N >= 7 && (d === 4 || d === 9 || (N >= 40 && d === 7)); }
+  function curveS(N) { return N <= 3 ? N : Math.min(7.6, 2.6 + 1.0 * Math.log(N - 2)); }
+  function effOf(N) { if (N <= 3) return N; var t = curveS(N); if (N >= 11) t += SAWP[N % 10]; else if (N === 9) t += 0.5; return Math.max(3, Math.min(10, Math.round(t))); }
   function levelConfig(N) {
     var br = isBreather(N), ch = isChallenge(N), h = hashStr("paneslide:lvcfg3:" + N), par = effOf(N);
-    var cfg = { d: N, par: par, lo: par, hi: par, breather: br, challenge: ch, greedy: N >= 6 && !br, diff: N <= 3 ? 2 : 3 };
+    var cfg = { d: N, par: par, lo: par, hi: par, breather: br, challenge: ch, greedy: (br || (N > 10 && N % 10 === 2)) ? "solve" : isAha(N) ? true : false, diff: N <= 3 ? 2 : 3 };
     if (N === 1) { cfg.n = 3; cfg.panes = 2; cfg.shapes = ["I2"]; cfg.mixed = 1; cfg.flavour = "tiny"; return cfg; }
     if (N <= 3) { cfg.n = N === 2 ? 3 : 4; cfg.panes = N === 2 ? 2 : 3; cfg.dup = N === 3 ? 1 : 0; cfg.shapes = ["I2", "L3"]; cfg.mixed = 1; cfg.flavour = "tiny"; cfg.inside = true; return cfg; }
     var fls = par <= 4 ? ["tiny", "mix"] : par <= 6 ? ["mix", "bars", "corners"] : ["mix", "bars", "corners", "blocks"];
@@ -471,7 +478,7 @@
   // seeds, then accepts par one swipe either side, then the next-smaller board size. Never
   // gives up the greedy rule except on the last-resort fallback (counted by the validator).
   function generateLevel(N, opts) {
-    var deadline = opts && opts.ms ? Date.now() + opts.ms : 0, cfg = levelConfig(N), lv = null, seed = "paneslide:level:v3:" + N;
+    var deadline = opts && opts.ms ? Date.now() + opts.ms : 0, cfg = levelConfig(N), lv = null, seed = "paneslide:level:v4:" + N;
     for (var s = 0; !lv && s < 4; s++) { lv = buildGlide(cfg, seed + (s ? ":s" + s : ""), deadline, 2500); if (deadline && Date.now() > deadline) break; }
     if (!lv) { var c2 = {}; for (var x in cfg) c2[x] = cfg[x]; c2.lo = Math.max(1, cfg.par - 1); c2.hi = cfg.par + 1; c2.shapes = FLAVOURS.mix; if (cfg.n === 5 && cfg.par >= 7) c2.panes = Math.max(cfg.panes, 5); lv = buildGlide(c2, seed + ":w", 0, 5000); if (lv) lv.fallback = 1; }
     if (!lv) { var c3 = {}; for (var y in cfg) c3[y] = cfg[y]; c3.lo = 3; c3.hi = cfg.par; c3.greedy = false; c3.panes = Math.max(3, cfg.panes - 1); lv = buildGlide(c3, seed + ":f", 0, 6000); if (lv) lv.fallback = 2; }
@@ -494,7 +501,7 @@
     generate: generate, tutorial: tutorial, allVisible: allVisible, solve: solve, render: render, rowFeedback: rowFeedback,
     paneCells: paneCells, diffCount: diffCount, curveS: curveS, movable: movable, TWISTS: TWISTS, isChallenge: isChallenge, levelConfig: levelConfig, generateLevel: generateLevel,
     effOf: effOf, grabOrder: grabOrder, GLIDE_FROM: GLIDE_FROM, glideTo: glideTo, glideMoves: glideMoves, validState: validState, distOf: distOf, nextMove: nextMove,
-    greedySolves: greedySolves, glideSolutions: glideSolutions, buildGlide: buildGlide, parOf: function (p) { return p.par || movable(p); }, packLevel: packLevel, unpackLevel: unpackLevel, isBreather: isBreather, puzzleNumber: puzzleNumber, addDays: addDays, parseDate: parseDate
+    greedySolves: greedySolves, glideSolutions: glideSolutions, buildGlide: buildGlide, parOf: function (p) { return p.par || movable(p); }, packLevel: packLevel, unpackLevel: unpackLevel, isBreather: isBreather, isAha: isAha, puzzleNumber: puzzleNumber, addDays: addDays, parseDate: parseDate
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.PaneEngine = api;

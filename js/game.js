@@ -29,6 +29,9 @@
   var date = /^\d{4}-\d{2}-\d{2}$/.test(qs.get("date") || "") ? qs.get("date") : today;
   var practice = date !== today;
   var prefs = load("ps2:prefs", { sound: true, patterns: false, tutDone: false, mixSeen: [] });
+  if (prefs.music === undefined) prefs.music = true; // soft background music, on by default at a low volume
+  if (typeof prefs.musicVol !== "number") prefs.musicVol = 0.18;
+  if (!Array.isArray(prefs.marks)) prefs.marks = []; // coach marks already shown
   if (typeof prefs.vibe !== "boolean") prefs.vibe = true;
   var stats = load("ps2:stats", { played: 0, streak: 0, best: 0, lastWin: null, dist: [0, 0, 0, 0] });
   var mode, puz, n, state, GKEY, zTop = 10, locked = false;
@@ -65,7 +68,6 @@
   var RANKS = [[5, "Glass Spark"], [10, "Glass Apprentice"], [20, "Pane Pusher"], [30, "Colour Mixer"], [50, "Glass Master"], [75, "Prism Pro"], [100, "Window Wizard"], [150, "Stained-Glass Sage"], [200, "Lightkeeper"], [300, "Grand Glazier"], [500, "PaneSlide Legend"]];
   function rankIndex(cleared) { var i = -1; RANKS.forEach(function (r, k) { if (cleared >= r[0]) i = k; }); return i; }
   function isMilestone(N) { return N === 5 || N % 10 === 0; }
-  var TIPS = { locked: "🔒 Locked glass stops others!", duo: "🎨 Only 2 colours!", free: "✥ Slides any way!", challenge: "🏆 Challenge!", breather: "🌿 Easy one!", glide: "👆 Swipe: glass glides!", stick: "🧲 Glass sticks on new colour!", order: "🤔 Order matters!" };
 
   var view = "home";
   function showView(v) {
@@ -87,6 +89,8 @@
     var lv = $("playLv"); lv.textContent = "Level " + prog.unlocked;
     var d = new Date(); $("calMon").textContent = d.toLocaleString("en", { month: "short" }).toUpperCase(); $("calDay").textContent = d.getDate();
     var st = load("ps2:game:" + today, null), ds = $("dailyStat");
+    clearMarks(); syncMusicBtn();
+    if (prefs.tutDone) { mark("music", "btnMusic", 700); mark("daily", "btnDaily"); }
     if (st && st.status === "won") ds.innerHTML = "<span class='done'>✔</span>";
     else if (currentStreak() > 0) ds.innerHTML = "<i class='ico fire'></i>" + currentStreak();
     else ds.innerHTML = "<span class='new'>NEW</span>";
@@ -102,8 +106,9 @@
     setRule("");
     $("btnSkip").hidden = true; $("status").hidden = false;
     setBadge(CAL_SVG, practice ? "Practice" : "Daily", practice ? date.slice(5) : "#" + puz.number);
-    showView("play"); build();
+    showView("play"); build(); clearMarks();
     if (state.status === "won") { $("board").classList.add("won"); setTimeout(openEnd, 500); }
+    else if (!practice) { mark("everyone", "lvBadge", 600); mark("stars", "status"); }
   }
   function startTutorial() {
     mode = "tutorial"; puz = E.tutorial(); n = puz.n; GKEY = null;
@@ -115,7 +120,7 @@
   }
   function ensureLevels(cb) {
     if (window.PANESLIDE_LEVELS) return cb();
-    var sc = document.createElement("script"); sc.src = "js/levels.js?v=5"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+    var sc = document.createElement("script"); sc.src = "js/levels.js?v=6"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
   }
   function getLevel(N) {
     var D = window.PANESLIDE_LEVELS;
@@ -134,18 +139,16 @@
       setBadge(puz.challenge ? "🏆" : puz.breather ? "🌿" : ch.icon, "Level", N);
       showView("play"); build(); updateHint(); updateStarLine();
       tipShown = null; setRule("");
-      var intro = N === 1 ? "glide" : N === 2 ? "stick" : N === 3 ? "order" : null;
-      var key = intro && prog.tips.indexOf(intro) < 0 ? intro : puz.twist && prog.tips.indexOf(puz.twist) < 0 ? puz.twist : puz.challenge && prog.tips.indexOf("challenge") < 0 ? "challenge" : puz.breather && prog.tips.indexOf("breather") < 0 ? "breather" : null;
-      var tip = key ? TIPS[key] : (N % 20 === 1) ? ch.icon + " " + ch.name + "!" : null;
-      if (key) { prog.tips.push(key); lvSave(); }
-      if (tip) setTimeout(function () { flashTip(tip, 2800); }, 350);
+      clearMarks(); levelMarks(N);
+      if (N % 20 === 1 && N > 1) setTimeout(function () { flashTip(ch.icon + " " + ch.name + "!", 2800); }, 350);
     });
   }
   function setRule(t) { var r = $("rule"); r.textContent = t; r.classList.toggle("coaching", !!t); }
 
   // ---------- audio (synthesised, self-made) ----------
   var ac = null;
-  function actx() { if (!ac) { var A = window.AudioContext || window.webkitAudioContext; if (A) ac = new A(); } if (ac && ac.state === "suspended") { var r = ac.resume(); if (r && r.catch) r.catch(function () {}); } return ac; } // Firefox rejects a pending resume() when you leave the page
+  var gestured = false; // browsers only allow sound after the player has tapped (no AudioContext before that)
+  function actx() { if (!gestured) return null; if (!ac) { var A = window.AudioContext || window.webkitAudioContext; if (A) ac = new A(); } if (ac && ac.state === "suspended") { var r = ac.resume(); if (r && r.catch) r.catch(function () {}); } return ac; } // Firefox rejects a pending resume() when you leave the page
   function tone(f, dur, type, vol, when) {
     if (!prefs.sound) return; var a = actx(); if (!a) return;
     var t = a.currentTime + (when || 0), o = a.createOscillator(), g = a.createGain();
@@ -207,61 +210,120 @@
     x.fillStyle = (getComputedStyle(document.body).getPropertyValue("--frame2") || "").trim() || "#D9CCF7"; rr(x, 0, 0, side + 8, side + 8, 10); x.fill();
     puz.target.forEach(function (m, k) {
       var cx = 4 + (k % n) * (tc + g), cy = 4 + Math.floor(k / n) * (tc + g);
-      x.fillStyle = maskColor(m); rr(x, cx, cy, tc, tc, 5); x.fill();
+      x.fillStyle = m ? maskColor(m) : WELL; rr(x, cx, cy, tc, tc, 5); x.fill(); // flat colour: a picture, not glass
       if (prefs.patterns && m) patternInto(x, m, cx, cy, tc);
     });
     t.setAttribute("role", "img"); t.setAttribute("aria-label", "Target picture, " + n + " by " + n);
   }
-  function makeTiles() { // one glossy glass tile per colour, composited with "darken" (same colour stays the same)
-    glassTiles = {};
-    ["C", "M", "Y"].forEach(function (k) {
-      var cv = document.createElement("canvas"), x = hiDPI(cv, CELL, CELL);
-      x.fillStyle = HEX[k]; x.fillRect(0, 0, CELL, CELL);
-      var gl = x.createLinearGradient(0, 0, CELL, CELL); gl.addColorStop(0, "rgba(255,255,255,.6)"); gl.addColorStop(0.4, "rgba(255,255,255,0)");
-      x.fillStyle = gl; x.fillRect(0, 0, CELL, CELL); x.fillStyle = "rgba(0,0,0,.06)"; x.fillRect(0, CELL - 4, CELL, 4);
-      glassTiles[k] = cv;
+  // Glass is drawn as one raised piece per pane: coloured body, soft top light, a glossy diagonal
+  // streak, a bright rim on the top-left edge, a darker rim bottom-right and a drop shadow. Empty
+  // slots are recessed wells, so the glass clearly sits on top of the board.
+  var WELL = "#E1D8F1", paneSprites = [], glassCv = null, shimmerT = -1, liftPi = -1;
+  function rrPath(ctx, x, y, w, h, r) { ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function panePath(ctx, p, ox, oy) { // the cells of a pane joined into one shape
+    var R = Math.round(CELL * 0.2), on = {}; p.cells.forEach(function (c) { on[c[0] + "," + c[1]] = 1; });
+    ctx.beginPath();
+    p.cells.forEach(function (c) {
+      var px = ox + c[1] * STEP, py = oy + c[0] * STEP, rt = on[c[0] + "," + (c[1] + 1)], dn = on[(c[0] + 1) + "," + c[1]];
+      rrPath(ctx, px, py, CELL, CELL, R);
+      if (rt) ctx.rect(px + CELL - R, py, GAP + 2 * R, CELL);
+      if (dn) ctx.rect(px, py + CELL - R, CELL, GAP + 2 * R);
+      if (rt && dn && on[(c[0] + 1) + "," + (c[1] + 1)]) ctx.rect(px + CELL - R, py + CELL - R, GAP + 2 * R, GAP + 2 * R);
     });
   }
+  function makeSprite(p) {
+    var W = p.w * STEP - GAP, H = p.h * STEP - GAP, cv = document.createElement("canvas"), s = hiDPI(cv, W, H), b = Math.max(2.5, CELL / 22);
+    panePath(s, p, 0, 0); s.fillStyle = HEX[p.color]; s.fill();
+    s.globalCompositeOperation = "source-atop";
+    var v = s.createLinearGradient(0, 0, 0, H); v.addColorStop(0, "rgba(255,255,255,.30)"); v.addColorStop(Math.min(0.45, CELL / H * 0.5), "rgba(255,255,255,0)"); v.addColorStop(1, "rgba(30,0,60,.10)");
+    s.fillStyle = v; s.fillRect(0, 0, W, H);
+    var D = CELL * 1.5, g = s.createLinearGradient(0, 0, D, D);
+    [[0, .55], [.2, .16], [.3, 0], [.4, 0], [.42, .5], [.47, .5], [.49, 0], [.53, 0], [.545, .32], [.57, .32], [.585, 0], [1, 0]].forEach(function (q) { g.addColorStop(q[0], "rgba(255,255,255," + q[1] + ")"); });
+    if (!p.locked) { s.fillStyle = g; s.fillRect(0, 0, W, H); }
+    function rim(col, dx, dy, alpha) { // edge light: the shape minus itself shifted
+      var t = document.createElement("canvas"), tx = hiDPI(t, W, H);
+      panePath(tx, p, 0, 0); tx.fillStyle = col; tx.fill();
+      tx.globalCompositeOperation = "destination-out"; panePath(tx, p, dx, dy); tx.fill();
+      s.globalAlpha = alpha; s.drawImage(t, 0, 0, W, H); s.globalAlpha = 1;
+    }
+    rim("#FFFFFF", b, b, 0.95);
+    rim("#1E0A46", -b, -b, p.locked ? 0.5 : 0.25);
+    if (p.locked) { // metal frame + bolts: clearly fixed in place
+      rim("#4A3B6B", b * 1.8, b * 1.8, 0.55); rim("#4A3B6B", -b * 1.8, -b * 1.8, 0.35);
+      p.cells.forEach(function (c) {
+        [[0.17, 0.17], [0.83, 0.17], [0.17, 0.83], [0.83, 0.83]].forEach(function (q) {
+          var bx = c[1] * STEP + CELL * q[0], by = c[0] * STEP + CELL * q[1], r = Math.max(2.6, CELL / 20);
+          var bg = s.createRadialGradient(bx - r / 3, by - r / 3, 0, bx, by, r); bg.addColorStop(0, "#FFFFFF"); bg.addColorStop(1, "#8D88A6");
+          s.beginPath(); s.arc(bx, by, r, 0, 6.3); s.fillStyle = bg; s.fill(); s.strokeStyle = "rgba(40,20,80,.45)"; s.lineWidth = 1; s.stroke();
+        });
+      });
+    }
+    return { cv: cv, W: W, H: H };
+  }
+  function makeTiles() { paneSprites = puz.panes.map(makeSprite); glassCv = document.createElement("canvas"); }
   function drawBoard() {
     if (!boardCv || !puz) return;
     var side = PAD * 2 + n * STEP - GAP, x = boardCv.getContext("2d"), k = boardCv.width / side;
     x.setTransform(k, 0, 0, k, 0, 0); x.globalCompositeOperation = "source-over"; x.clearRect(0, 0, side, side);
-    var fr = x.createLinearGradient(0, 0, 0, side); fr.addColorStop(0, "#F4EFFF"); fr.addColorStop(1, "#D9CCF7");
+    var fr = x.createLinearGradient(0, 0, 0, side); fr.addColorStop(0, "#F6F2FF"); fr.addColorStop(1, "#D6C8F5");
     x.fillStyle = fr; rr(x, 0, 0, side, side, 24); x.fill();
-    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) {
-      x.fillStyle = "#FFFFFF"; rr(x, PAD + c * STEP, PAD + r * STEP, CELL, CELL, 13); x.fill();
-      x.fillStyle = "rgba(40,20,90,.07)"; rr(x, PAD + c * STEP, PAD + r * STEP, CELL, 4, 2); x.fill();
+    var R = Math.round(CELL * 0.2);
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) { // recessed empty slots
+      var wx = PAD + c * STEP, wy = PAD + r * STEP;
+      x.save(); rr(x, wx, wy, CELL, CELL, R); x.clip();
+      x.fillStyle = WELL; x.fillRect(wx, wy, CELL, CELL);
+      var ish = x.createLinearGradient(0, wy, 0, wy + CELL); ish.addColorStop(0, "rgba(60,30,130,.24)"); ish.addColorStop(0.22, "rgba(60,30,130,0)"); ish.addColorStop(0.85, "rgba(255,255,255,0)"); ish.addColorStop(1, "rgba(255,255,255,.75)");
+      x.fillStyle = ish; x.fillRect(wx, wy, CELL, CELL); x.restore();
     }
-    x.globalCompositeOperation = "darken";
-    puz.panes.forEach(function (p, i) {
-      var o = vis[i]; p.cells.forEach(function (cl) {
-        var px = PAD + o[0] + cl[1] * STEP, py = PAD + o[1] + cl[0] * STEP;
-        x.save(); rr(x, px, py, CELL, CELL, 13); x.clip(); x.drawImage(glassTiles[p.color], px, py, CELL, CELL); x.restore();
-      });
+    puz.panes.forEach(function (p, i) { // drop shadows (the glass covers its own)
+      var o = vis[i], up = i === liftPi; x.save();
+      x.shadowColor = "rgba(40,15,90," + (up ? 0.42 : 0.34) + ")"; x.shadowBlur = up ? 16 : 9; x.shadowOffsetY = up ? 8 : 4;
+      panePath(x, p, PAD + o[0], PAD + o[1]); x.fillStyle = HEX[p.color]; x.fill(); x.restore();
     });
-    x.globalCompositeOperation = "source-over";
+    // glass layer: panes composited with "darken" on their own layer, so mixes are exact
+    if (glassCv.width !== boardCv.width) { glassCv.width = boardCv.width; glassCv.height = boardCv.height; }
+    var gx = glassCv.getContext("2d"); gx.setTransform(1, 0, 0, 1, 0, 0); gx.globalCompositeOperation = "source-over"; gx.clearRect(0, 0, glassCv.width, glassCv.height);
+    gx.setTransform(k, 0, 0, k, 0, 0); gx.globalCompositeOperation = "darken";
+    puz.panes.forEach(function (p, i) { var sp = paneSprites[i]; gx.drawImage(sp.cv, PAD + vis[i][0], PAD + vis[i][1], sp.W, sp.H); });
+    x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.drawImage(glassCv, 0, 0); x.restore();
     puz.panes.forEach(function (p, i) {
       var o = vis[i], focus = paneEls[i] === document.activeElement && !TEST, hinted = hintPi === i;
+      if (shimmerT >= 0 && !p.locked) { // idle shimmer: a soft light sweeps over the movable glass
+        var bx = PAD + o[0], by = PAD + o[1], W = paneSprites[i].W, H = paneSprites[i].H, sx = bx - CELL + shimmerT * (W + H + CELL * 2);
+        x.save(); panePath(x, p, bx, by); x.clip();
+        var sg = x.createLinearGradient(sx - CELL * 0.5, by, sx + CELL * 0.5, by + CELL * 0.5);
+        sg.addColorStop(0, "rgba(255,255,255,0)"); sg.addColorStop(0.5, "rgba(255,255,255,.42)"); sg.addColorStop(1, "rgba(255,255,255,0)");
+        x.fillStyle = sg; x.fillRect(bx, by, W, H); x.restore();
+      }
       p.cells.forEach(function (cl) {
         var px = PAD + o[0] + cl[1] * STEP, py = PAD + o[1] + cl[0] * STEP;
         if (prefs.patterns) patternInto(x, E.BIT[p.color], px, py, CELL);
-        if (p.locked) { x.strokeStyle = "rgba(42,27,77,.3)"; x.lineWidth = 4; rr(x, px + 2, py + 2, CELL - 4, CELL - 4, 11); x.stroke(); }
-        if (focus || hinted) { x.strokeStyle = hinted ? "#FFB800" : "#6A46EA"; x.lineWidth = 4; rr(x, px + 2, py + 2, CELL - 4, CELL - 4, 11); x.stroke(); }
+        if (focus || hinted) { x.strokeStyle = hinted ? "#FFB800" : "#6A46EA"; x.lineWidth = 4; rr(x, px + 2, py + 2, CELL - 4, CELL - 4, R - 2); x.stroke(); }
       });
     });
+  }
+  var shimT = null;
+  function shimmerLoop() { // every few seconds while playing, unless the player prefers less motion
+    clearInterval(shimT);
+    if (TEST || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+    shimT = setInterval(function () {
+      if (document.hidden || anims.length || shimmerT >= 0 || !puz || !state || state.status !== "playing" || (view !== "play" && view !== "tutorial")) return;
+      var t0 = performance.now();
+      (function fr(now) { var t = (now - t0) / 1300; shimmerT = t < 1 ? t : -1; drawBoard(); if (t < 1) requestAnimationFrame(fr); })(t0);
+    }, 5200);
   }
   function paint() { if (paintRAF) return; paintRAF = requestAnimationFrame(function () { paintRAF = 0; drawBoard(); }); }
   function easeOut(t) { var c = 1.4; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); } // gentle overshoot, like glass settling
   // Animate pane pi's picture from its current spot to offset `to` (also moves its arrow).
   function animateTo(pi, to, ms, done, bounceBack) {
     var from = vis[pi].slice(), t0 = performance.now(), id = {};
-    anims.push(id);
+    anims.push(id); if (!bounceBack) liftPi = pi;
     (function frame(now) {
       var t = Math.min(1, (now - t0) / ms), e = bounceBack ? Math.sin(t * Math.PI) : easeOut(t);
       vis[pi] = [from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e];
       moveGrip(pi); drawBoard();
       if (t < 1) requestAnimationFrame(frame);
-      else { if (bounceBack) vis[pi] = from; else vis[pi] = to.slice(); puz.panes.forEach(function (q, i) { moveGrip(i); }); drawBoard(); anims.splice(anims.indexOf(id), 1); if (done) done(); }
+      else { if (bounceBack) vis[pi] = from; else vis[pi] = to.slice(); puz.panes.forEach(function (q, i) { moveGrip(i); }); drawBoard(); anims.splice(anims.indexOf(id), 1); if (liftPi === pi && !anims.length) { liftPi = -1; drawBoard(); } if (done) done(); }
     })(t0);
   }
   function moveGrip(pi) { var p = puz.panes[pi], hc = p.cells[gripAt[pi]] || gripCell(p); gripEls[pi].style.transform = "translate(" + (PAD + vis[pi][0] + hc[1] * STEP) + "px," + (PAD + vis[pi][1] + hc[0] * STEP) + "px)"; }
@@ -469,7 +531,7 @@
     if (ms) setTimeout(fx, ms * 0.8); else fx();
     if (E.diffCount(img, puz.target) === 0) { if (ms) { locked = true; setTimeout(win, ms); } else win(); }
     else if (mode === "tutorial") setTimeout(coachTutorial, (ms || 0) + 250);
-    else if (puz.glide && E.distOf(puz, state.pos) < 0) setTimeout(function () { if (state.status === "playing") flashTip("↶ Stuck! Undo", 2600); }, (ms || 0) + 150);
+    else if (puz.glide && E.distOf(puz, state.pos) < 0) setTimeout(function () { if (state.status === "playing") { flashTip("↶ Stuck! Undo", 2600); mark("stuck", "btnUndo", 300); } }, (ms || 0) + 150);
   }
   function updateMoves(bounce) {
     var m = $("moves"); m.textContent = state.moves;
@@ -572,7 +634,7 @@
   }
   function chipHTML(ico, val, cls) { return "<span class='stat" + (cls ? " " + cls : "") + "'>" + (ico ? "<i class='ico " + ico + "'></i>" : "") + val + "</span>"; }
   function playStars(k) { for (var i = 0; i < k; i++) (function (j) { setTimeout(function () { sfx.star(j); buzz(12); }, 250 + j * 380 + 200); })(i); }
-  function dailyStars() { var over = state.moves - parOf(puz); return over <= 0 ? 3 : over <= 2 ? 2 : 1; }
+  function dailyStars() { return starsBy(state.moves, parOf(puz)); }
   function openEnd() {
     var d = $("dlgEnd");
     if (mode === "tutorial") {
@@ -623,13 +685,16 @@
   function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 1700); }
 
   // ---------- levels: stars, hints, win, milestones, map ----------
-  function starsFor(moves, hinted) { var par = parOf(puz), st = moves <= par ? 3 : moves <= par + (par >= 4 ? 2 : 1) ? 2 : 1; return hinted ? Math.min(2, st) : st; } // 3 = optimal (one slide per pane), 2 = 1-2 extra slides
+  // Generous stars (v4): 3 = par or one spare swipe (par 1-2: exact), 2 = a few more, 1 = solved.
+  // Hints never cost stars; solving in exactly par earns a "Perfect!" cheer.
+  function starsBy(moves, par) { return moves <= par + (par >= 3 ? 1 : 0) ? 3 : moves <= par + Math.max(3, Math.ceil(par / 2) + 1) ? 2 : 1; }
+  function starsFor(moves) { return starsBy(moves, parOf(puz)); }
   function misplaced() { return puz.panes.filter(function (p, i) { return state.pos[i] !== puz.solution[i]; }).length; }
   var STAR = '<svg viewBox="0 0 24 24"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>';
   function starsHTML(k, cls) { var h = ""; for (var i = 0; i < 3; i++) h += "<i class='st" + (i < k ? " on" : "") + (cls ? " " + cls : "") + "' style='--i:" + i + "'>" + STAR + "</i>"; return h; }
   function updateStarLine() {
     if (mode !== "level" && mode !== "daily") return;
-    var k = mode === "daily" ? (function () { var over = state.moves + misplaced() - parOf(puz); return over <= 0 ? 3 : over <= 2 ? 2 : 1; })() : starsFor(state.moves + misplaced(), state.hinted);
+    var k = starsBy(state.moves + (puz.glide ? Math.max(0, E.distOf(puz, state.pos)) : misplaced()), parOf(puz));
     var sl = $("starLine"), prev = +sl.dataset.k || 3; sl.dataset.k = k;
     sl.innerHTML = starsHTML(k); sl.setAttribute("aria-label", k + " stars possible");
     if (k < prev) { var lost = sl.children[k]; if (lost) lost.classList.add("lose"); }
@@ -669,7 +734,7 @@
     flashTip("💡 Swipe " + (p.axis === "h" ? (m.dir > 0 ? "→" : "←") : (m.dir > 0 ? "↓" : "↑")), 0); sfx.mix(); buzz(10);
   }
   function recordLevel() {
-    var N = puz.level, st = starsFor(state.moves, state.hinted), prev = prog.stars[N] || 0, firstClear = N >= prog.unlocked, gained = [];
+    var N = puz.level, st = starsFor(state.moves), prev = prog.stars[N] || 0, firstClear = N >= prog.unlocked, gained = [];
     prog.stars[N] = Math.max(prev, st); prog.best[N] = Math.min(prog.best[N] || 999, state.moves);
     if (firstClear) prog.unlocked = N + 1;
     if (st === 3) { prog.perf++; prog.threeSince = (prog.threeSince || 0) + 1; } else prog.perf = 0;
@@ -686,9 +751,13 @@
   function openLevelEnd(st, gained) {
     lastStars = st; $("hudStars").textContent = totalStars();
     $("lvStars").innerHTML = starsHTML(st, "pop"); playStars(st);
-    $("lvTitle").textContent = "Level " + puz.level;
+    var perfect = state.moves <= parOf(puz), cheers = ["Great!", "Nice!", "Lovely!", "Well done!", "Sweet!"];
+    $("lvTitle").textContent = perfect ? "✨ Perfect!" : st === 3 ? cheers[puz.level % cheers.length] : "Level " + puz.level;
     $("lvSub").innerHTML = chipHTML("foot", state.moves + " <small>/</small> <i class='ico flag'></i>" + parOf(puz)) + (gained.length ? chipHTML("bulb", "+" + gained.length, "plus") : "");
+    giftBar(puz.level);
     $("dlgLevel").showModal(); setTimeout(function () { confetti(true); }, 200);
+    if (perfect) setTimeout(function () { sfx.medal(); }, 1500);
+    mark("gift", "giftBar", 1400);
   }
   function badgeSVG(N, ri) {
     var tier = Math.max(0, Math.min(3, Math.floor(ri / 3))), rim = [["#E0A060", "#A8642A"], ["#E3E9F2", "#8F9AAD"], ["#FFE16A", "#C98A00"], ["#C9B5FF", "#6A46EA"]][tier];
@@ -715,7 +784,7 @@
     $("rankBar").setAttribute("aria-label", next ? "Next rank at level " + next[0] : "Top rank");
     var h = chipHTML("star", totalStars()) + (prog.perf > 0 ? chipHTML("spark", prog.perf) : "") + chipHTML("bulb", prog.hints) + (gained.length ? chipHTML("bulb", "+" + gained.length, "plus") : "");
     $("mileStats").innerHTML = h;
-    $("dlgMile").showModal();
+    $("dlgMile").showModal(); mark("rank", "rankBar", 2400);
     var fill = $("rankFill");
     if (newRank) { // fill the bar for the rank just reached, then roll over to the next one
       $("rankNext").innerHTML = "<i class='ico medal'></i>" + N;
@@ -777,7 +846,8 @@
     applyTheme(chapterOf(prog.unlocked));
     var ri = rankIndex(prog.unlocked - 1);
     setBadge("<i class='ico medal' style='width:26px;height:26px'></i>", "Rank", ri >= 0 ? RANKS[ri][1] : "Rookie");
-    showView("map"); renderMap();
+    showView("map"); renderMap(); clearMarks();
+    mark("map", function () { return document.querySelector(".node.current") || $("btnPlayNext"); }, 700);
   }
 
   function confetti(inDialog) {
@@ -795,13 +865,183 @@
     })(t0);
   }
 
+  // ---------- next-gift bar (levels end) ----------
+  function giftBar(N) { // progress towards the next milestone gift (a free hint at level 5 and every 10)
+    var next = N < 5 ? 5 : Math.floor(N / 10) * 10 + 10, prev = N < 5 ? 0 : N < 10 ? 5 : Math.floor(N / 10) * 10, left = next - N;
+    if (isMilestone(N)) { prev = N; }
+    var pct = Math.round((N - prev) / (next - prev) * 100);
+    $("giftFill").style.width = "0%"; setTimeout(function () { $("giftFill").style.width = Math.max(6, pct) + "%"; }, 350);
+    $("giftTxt").textContent = left === 1 ? "next level!" : left + " to go";
+    $("giftBar").setAttribute("aria-label", "Next gift at level " + next + ", " + left + " to go");
+  }
+
+  // ---------- coach marks: a friendly pointer the first time you meet something new ----------
+  var MARKS = {
+    glide: ["👆", "Swipe the glass. It glides until it stops."],
+    stick: ["🧲", "Glass stops as soon as it slides onto new colour."],
+    order: ["🤔", "Which pane first? The order changes where glass stops."],
+    stars: ["⭐", "Finish near par 🚩 for 3 stars."],
+    undo: ["↶", "Oops? Undo takes back a swipe."],
+    hint: ["💡", "Stuck? A hint shows your next swipe."],
+    locked: ["🔒", "Locked glass never moves. Use it as a stopper!"],
+    duo: ["🎨", "Only two colours in this picture."],
+    challenge: ["🏆", "A trickier one. Take your time!"],
+    breather: ["🌿", "A relaxing one. Enjoy!"],
+    stuck: ["↶", "No way through from here. Undo a swipe!"],
+    rank: ["🏅", "A new rank step and a free hint every 10 levels."],
+    gift: ["🎁", "Fill the bar for a free hint!"],
+    map: ["🗺️", "Your journey! Tap here for the next level."],
+    music: ["🎵", "Calm music. Tap here to mute it."],
+    daily: ["📅", "A fresh puzzle every day. Keep your streak!"],
+    everyone: ["🌍", "Everyone gets this same puzzle today."]
+  };
+  var markQ = [], markEl = null, markTimer = 0;
+  var markOn = !TEST || qs.get("marks") === "1"; // automated tests switch them off unless asked
+  function seen(key) { return prefs.marks.indexOf(key) >= 0; }
+  function mark(key, target, delay) {
+    if (!markOn || seen(key) || !MARKS[key] || markQ.some(function (m) { return m.key === key; }) || (markEl && markEl.dataset.key === key)) return;
+    markQ.push({ key: key, target: target, delay: delay || 250 });
+    if (!markEl && !markTimer) nextMark();
+  }
+  function clearMarks() { markQ = []; clearTimeout(markTimer); markTimer = 0; hideMark(); }
+  function nextMark() {
+    var m = markQ[0]; if (!m) return;
+    markTimer = setTimeout(function () { markTimer = 0; markQ.shift(); if (!showMark(m)) nextMark(); }, m.delay);
+  }
+  function markTarget(t) {
+    if (typeof t === "function") t = t();
+    if (typeof t === "string") t = $(t);
+    if (!t) return null;
+    if (t.getBoundingClientRect) { if (t.hidden || t.offsetParent === null && getComputedStyle(t).position !== "fixed") return null; return { r: t.getBoundingClientRect(), el: t }; }
+    return { r: t, el: boardEl };
+  }
+  function showMark(m) {
+    var tg = markTarget(m.target); if (!tg || tg.r.width < 2) return false;
+    var dlg = tg.el.closest && tg.el.closest("dialog[open]"), open = document.querySelector("dialog[open]");
+    if (open && open !== dlg) { markQ.unshift(m); m.delay = 900; nextMark(); return true; } // wait until the dialog is closed
+    prefs.marks.push(m.key); save("ps2:prefs", prefs);
+    var host = dlg || document.body, hr = dlg ? dlg.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth, height: innerHeight };
+    if (dlg) { hr = { left: hr.left + dlg.clientLeft, top: hr.top + dlg.clientTop, width: dlg.clientWidth, height: dlg.clientHeight }; }
+    var r = tg.r, x = r.left - hr.left, y = r.top - hr.top, pad = 6;
+    var L = el("div", "cm-layer" + (dlg ? " in-dlg" : ""), host); L.dataset.key = m.key;
+    L.setAttribute("role", "status"); L.setAttribute("aria-live", "polite");
+    var ring = el("div", "cm-ring", L);
+    ring.style.left = x - pad + "px"; ring.style.top = y - pad + "px"; ring.style.width = r.width + pad * 2 + "px"; ring.style.height = r.height + pad * 2 + "px";
+    var below = y + r.height / 2 < hr.height * 0.55, bub = el("div", "cm-bub", L), ar = el("div", "cm-arrow " + (below ? "up" : "down"), L);
+    bub.innerHTML = "<span class='cm-ico'>" + MARKS[m.key][0] + "</span><span class='cm-txt'>" + MARKS[m.key][1] + "</span><small>tap to continue</small>";
+    var bw = Math.min(290, hr.width - 24); bub.style.width = bw + "px";
+    var cx = x + r.width / 2, bl = Math.max(12, Math.min(hr.width - bw - 12, cx - bw / 2));
+    bub.style.left = bl + "px"; ar.style.left = cx - 12 + "px";
+    if (below) { ar.style.top = y + r.height + pad + 6 + "px"; bub.style.top = y + r.height + pad + 26 + "px"; }
+    else { ar.style.top = y - pad - 26 + "px"; bub.style.bottom = (hr.height - (y - pad - 26)) + "px"; }
+    markEl = L; sfx.mix();
+    function done(e) { if (e) { e.preventDefault(); e.stopPropagation(); } hideMark(); nextMark(); }
+    L.addEventListener("click", done);
+    L._key = function (e) { if (e.key === "Escape" || e.key === "Enter" || e.key === " ") done(e); };
+    document.addEventListener("keydown", L._key, true);
+    return true;
+  }
+  function hideMark() { if (!markEl) return; document.removeEventListener("keydown", markEl._key, true); markEl.remove(); markEl = null; }
+  function paneRect(pi) { var b = boardEl.getBoundingClientRect(), p = puz.panes[pi], o = vis[pi]; return { left: b.left + PAD + o[0], top: b.top + PAD + o[1], width: p.w * STEP - GAP, height: p.h * STEP - GAP }; }
+  function levelMarks(N, again) {
+    var first = function () { var m = E.nextMove(puz, state.pos); return m ? paneRect(m.pane) : boardEl.getBoundingClientRect(); };
+    if (N === 1 || again) mark("glide", first, 500);
+    if (N === 1 || again) mark("stars", "status");
+    if (N === 2 || (again && N > 2)) { mark("stick", first, 500); mark("undo", "btnUndo"); }
+    if (N === 3 || (again && N > 3)) mark("order", function () { return boardEl.getBoundingClientRect(); }, 500);
+    if (N >= 4) mark("hint", "btnHint", 500);
+    var lk = puz.panes.map(function (p, i) { return p.locked ? i : -1; }).filter(function (i) { return i >= 0; })[0];
+    if (lk !== undefined) mark("locked", function () { return paneRect(lk); }, 500);
+    if (puz.twist === "duo") mark("duo", "target", 500);
+    if (puz.challenge) mark("challenge", "lvBadge", 500);
+    if (puz.breather) mark("breather", "lvBadge", 500);
+  }
+
+  // ---------- background music: made live in the browser (no files, nothing to license) ----------
+  // Calm "puzzle cafe" style: slow soft chord pads (about 70 bpm) wandering between Cmaj7, Am7,
+  // Fmaj7, G6, Dm9 and Em7, with a sparse marimba-like melody from the pentatonic scale, an
+  // occasional bell, and a soft echo. Every bar is chosen at random, so it never loops the same way.
+  var music = (function () {
+    var a = null, bus = null, out = null, wet = null, timer = 0, nextT = 0, chord = 0, beat = 0, last = -1, api = { started: false, playing: false };
+    var BEAT = 60 / 70, CH = [[48, 55, 64, 71], [45, 52, 60, 67], [41, 48, 57, 64], [43, 50, 59, 64], [38, 50, 57, 64], [40, 47, 55, 62]];
+    var GO = [[1, 2, 4, 5], [2, 4, 3], [0, 3, 4], [0, 1, 5], [3, 2, 0], [1, 2]], PENT = [72, 74, 76, 79, 81, 84, 86, 88];
+    function hz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+    function setup() {
+      a = actx(); if (!a) return false;
+      if (bus) return true;
+      out = a.createGain(); out.gain.value = 0.0001; out.connect(a.destination);
+      bus = a.createBiquadFilter(); bus.type = "lowpass"; bus.frequency.value = 2600; bus.connect(out);
+      var len = Math.floor(a.sampleRate * 2.8), ir = a.createBuffer(2, len, a.sampleRate); // a soft room, made from fading noise
+      for (var ch = 0; ch < 2; ch++) { var d = ir.getChannelData(ch); for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+      var cv = a.createConvolver(); cv.buffer = ir; wet = a.createGain(); wet.gain.value = 0.45; wet.connect(cv); cv.connect(bus);
+      return true;
+    }
+    function voice(f, t, dur, type, vol, att, rel, toWet) {
+      var o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + att); g.gain.setValueAtTime(vol, t + Math.max(att, dur - rel)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(bus); if (toWet) g.connect(wet); o.start(t); o.stop(t + dur + 0.1); return o;
+    }
+    function pad(notes, t, dur) {
+      notes.forEach(function (m, i) {
+        var lp = a.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900; lp.connect(bus); lp.connect(wet);
+        [-5, 5].forEach(function (cents) {
+          var o = a.createOscillator(), g = a.createGain(); o.type = i === 0 ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = cents;
+          var v = i === 0 ? 0.05 : 0.022;
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 1.8); g.gain.setValueAtTime(v, t + dur - 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 2.2);
+          o.connect(g); g.connect(lp); o.start(t); o.stop(t + dur + 2.4);
+        });
+      });
+    }
+    function pluck(m, t, vol) { // marimba-ish: a sine plus a quick high partial
+      voice(hz(m), t, 1.4, "sine", vol, 0.006, 1.3, true);
+      voice(hz(m) * 4, t, 0.18, "sine", vol * 0.25, 0.003, 0.17, false);
+    }
+    function schedule() {
+      while (nextT < a.currentTime + 1.2) {
+        if (beat === 0) pad(CH[chord], nextT, BEAT * 8);
+        for (var half = 0; half < 2; half++) {
+          var t = nextT + half * BEAT / 2 + (Math.random() - 0.5) * 0.02;
+          if (Math.random() < (half ? 0.22 : 0.42) && beat < 7) {
+            var pool = PENT.filter(function (m) { return m !== last; }), m = pool[Math.floor(Math.random() * pool.length)];
+            if (last > 0 && Math.random() < 0.6) { var near = pool.filter(function (q) { return Math.abs(q - last) <= 5; }); if (near.length) m = near[Math.floor(Math.random() * near.length)]; }
+            last = m; pluck(m, t, 0.05 + Math.random() * 0.03);
+          }
+        }
+        if (beat === 4 && Math.random() < 0.18) voice(hz(PENT[Math.floor(Math.random() * 3) + 4] + 12), nextT, 2.6, "sine", 0.018, 0.01, 2.5, true); // a little bell
+        nextT += BEAT; beat++;
+        if (beat >= 8) { beat = 0; var go = GO[chord]; chord = go[Math.floor(Math.random() * go.length)]; }
+      }
+    }
+    function level() { return Math.pow(prefs.musicVol, 1.5) * 1.6; } // the slider feels even, from a whisper to clear
+    api.vol = function () { if (out && api.playing) out.gain.setTargetAtTime(Math.max(0.0001, level()), a.currentTime, 0.2); };
+    api.start = function () {
+      if (api.playing || document.hidden || !setup()) return;
+      api.started = api.playing = true;
+      nextT = Math.max(nextT, a.currentTime + 0.1); beat = 0;
+      out.gain.cancelScheduledValues(a.currentTime); out.gain.setValueAtTime(Math.max(0.0001, out.gain.value), a.currentTime);
+      out.gain.exponentialRampToValueAtTime(Math.max(0.0001, level()), a.currentTime + 3); // fade in
+      schedule(); clearInterval(timer); timer = setInterval(schedule, 250);
+    };
+    api.stop = function () {
+      if (!api.playing) return; api.playing = false; clearInterval(timer); timer = 0;
+      if (a && out) { out.gain.cancelScheduledValues(a.currentTime); out.gain.setTargetAtTime(0.0001, a.currentTime, 0.25); }
+    };
+    return api;
+  })();
+  function syncMusicBtn() { var b = $("btnMusic"); b.classList.toggle("off", !prefs.music); b.setAttribute("aria-pressed", prefs.music ? "true" : "false"); b.setAttribute("aria-label", prefs.music ? "Music on, tap to mute" : "Music off, tap to play"); }
+  function setMusic(on) {
+    prefs.music = !!on; save("ps2:prefs", prefs); syncMusicBtn();
+    var o = $("optMusic"); if (o) { o.checked = prefs.music; syncToggles(); }
+    if (prefs.music) { if (prefs.musicVol < 0.03) { prefs.musicVol = 0.18; $("optMusicVol").value = 18; $("musicVolTxt").textContent = "18%"; save("ps2:prefs", prefs); } music.start(); } else music.stop();
+  }
+
   // ---------- wiring ----------
   function openHelp() {
     $("mixList").innerHTML = [3, 6, 5, 7].map(function (m) { return "<span aria-label='" + MIXNAME[m] + "'>" + bitsOf(m).map(function (k) { return swatchHTML(E.BIT[k]); }).join("+") + "=" + swatchHTML(m, "res") + "</span>"; }).join(""); paintSwatches($("mixList"));
-    document.querySelector("#dlgHelp .st3").innerHTML = starsHTML(3); document.querySelectorAll("#dlgHelp .st2").forEach(function (x) { x.innerHTML = starsHTML(2); });
+    document.querySelectorAll("#dlgHelp .st3").forEach(function (x) { x.innerHTML = starsHTML(3); }); document.querySelectorAll("#dlgHelp .st2").forEach(function (x) { x.innerHTML = starsHTML(2); });
     $("dlgHelp").showModal();
   }
-  function openSettings() { $("optSound").checked = !!prefs.sound; $("optVibe").checked = !!prefs.vibe; $("optPatterns").checked = !!prefs.patterns; syncToggles(); $("dlgSettings").showModal(); }
+  function openSettings() { $("optMusic").checked = !!prefs.music; $("optMusicVol").value = Math.round(prefs.musicVol * 100); $("musicVolTxt").textContent = Math.round(prefs.musicVol * 100) + "%"; $("optSound").checked = !!prefs.sound; $("optVibe").checked = !!prefs.vibe; $("optPatterns").checked = !!prefs.patterns; syncToggles(); $("dlgSettings").showModal(); }
   function syncToggles() { document.querySelectorAll(".tgl").forEach(function (l) { l.classList.toggle("on", l.querySelector("input").checked); }); }
   function wire() {
     var b = $("board");
@@ -816,6 +1056,16 @@
     $("btnStats").addEventListener("click", function () { $("statsBody").innerHTML = statsHTML(-1); $("dlgStats").showModal(); });
     $("btnSettings").addEventListener("click", openSettings); $("btnHomeSettings").addEventListener("click", openSettings);
     $("optSound").addEventListener("change", function () { prefs.sound = this.checked; save("ps2:prefs", prefs); syncToggles(); if (prefs.sound) sfx.drop(); });
+    $("optMusic").addEventListener("change", function () { setMusic(this.checked); });
+    $("optMusicVol").addEventListener("input", function () { prefs.musicVol = this.value / 100; $("musicVolTxt").textContent = this.value + "%"; music.vol(); save("ps2:prefs", prefs); if (this.value > 0 && !prefs.music) setMusic(true); });
+    $("btnMusic").addEventListener("click", function () { setMusic(!prefs.music); toast(prefs.music ? "🎵 Music on" : "🔇 Music off"); });
+    $("btnTipsAgain").addEventListener("click", function () { prefs.marks = []; save("ps2:prefs", prefs); $("dlgHelp").close(); toast("💬 Tips will show again"); if (mode === "level") levelMarks(puz.level, true); else if (mode === "home") startHome(); else if (mode === "map") openMap(); });
+    ["mousedown", "pointerup", "touchend", "click", "keydown"].forEach(function (ev) { // these count as a real tap for autoplay rules
+      document.addEventListener(ev, function (e) { if (ev === "pointerup" && e.pointerType === "mouse") return; gestured = true; actx(); if (prefs.music) music.start(); }, true);
+    });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) music.stop(); else if (prefs.music && music.started) music.start(); });
+    window.addEventListener("pagehide", function () { music.stop(); });
+    document.querySelectorAll("dialog").forEach(function (d) { d.addEventListener("close", function () { if (markEl && markEl.parentNode === d) hideMark(); }); });
     $("optVibe").addEventListener("change", function () { prefs.vibe = this.checked; save("ps2:prefs", prefs); syncToggles(); buzz(20); });
     $("optPatterns").addEventListener("change", function () { prefs.patterns = this.checked; save("ps2:prefs", prefs); syncToggles(); document.body.classList.toggle("patterns", prefs.patterns); if (puz && boardCv) { paintTarget(); drawBoard(); } });
     $("btnShare").addEventListener("click", onShareBtn);
@@ -838,7 +1088,7 @@
     var rz; window.addEventListener("resize", function () { clearTimeout(rz); rz = setTimeout(function () { if (mode === "map" || mode === "home" || anims.length) return; clearHint(); build(); if (mode === "tutorial") coachTutorial(); }, 150); });
   }
 
-  wire();
+  wire(); syncMusicBtn(); shimmerLoop();
   var qLevel = parseInt(qs.get("level"), 10);
   if ((!prefs.tutDone || !prefs.glideTut) && !practice && qs.get("tutorial") !== "0") startTutorial(); // the new glide rules get a one-time tutorial, even for old players
   else if (qLevel >= 1 && (qLevel <= prog.unlocked || TEST)) startLevel(qLevel);
@@ -848,7 +1098,7 @@
 
   if (TEST) window.PS = {
     get puzzle() { return puz; }, get state() { return state; }, get mode() { return mode; }, shareText: shareText, mileShareText: function () { var N = puz.level, ri = rankIndex(N); return mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark"); },
-    get progress() { return prog; }, hint: useHint, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; },
+    get progress() { return prog; }, hint: useHint, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; }, get music() { return { on: prefs.music, vol: prefs.musicVol, playing: music.playing }; }, get markShown() { return markEl ? markEl.dataset.key : null; },
     grabPoint: function (pi) { // centre of a cell of pane pi that no other same-axis pane covers
       var p = puz.panes[pi], r = boardEl.getBoundingClientRect(), cells = E.paneCells(p, state.pos[pi]);
       var only = cells.filter(function (c) { return panesAt(c).every(function (q) { return q === pi || puz.panes[q].locked; }); });

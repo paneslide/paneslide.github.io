@@ -10,7 +10,7 @@
 <meta name="description" content="PaneSlide is a free colour-glass sliding puzzle game. Slide glass panes so the window matches the picture. Where glass overlaps, colours mix. A new daily puzzle plus endless levels.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preload" href="fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body>
 <div class="scene" id="scene" aria-hidden="true">
@@ -38,6 +38,7 @@
   <div class="home-row">
     <button class="cbtn round purple" id="btnHelp" aria-label="How to play"><b>?</b></button>
     <button class="cbtn round gold" id="btnStats" aria-label="Your stats"><svg viewBox="0 0 24 24" class="fill"><path d="M7 3h10v2h3v3a5 5 0 0 1-4.6 5A5 5 0 0 1 13 15.9V18h3v3H8v-3h3v-2.1A5 5 0 0 1 8.6 13 5 5 0 0 1 4 8V5h3V3Zm0 4H6v1a3 3 0 0 0 1.4 2.5A7 7 0 0 1 7 8V7Zm10 0v1c0 .9-.1 1.7-.4 2.5A3 3 0 0 0 18 8V7h-1Z"/></svg></button>
+    <button class="cbtn round blue" id="btnMusic" aria-label="Music" aria-pressed="true"><svg viewBox="0 0 24 24" class="fill note"><path d="M9 17.5V6.2l10-2.2v11.5a3 3 0 1 1-2-2.8V7.6l-6 1.3v8.6a3 3 0 1 1-2-2.8Z"/></svg><svg viewBox="0 0 24 24" class="slash"><path d="M4 4l16 16"/></svg></button>
     <button class="cbtn round pink" id="btnHomeSettings" aria-label="Settings"><svg viewBox="0 0 24 24" class="fill"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.4 4.6-.1-2.2 2-1.6-2-3.4-2.4.9a8 8 0 0 0-1.9-1.1L15.6 3h-4l-.4 2.6a8 8 0 0 0-1.9 1.1l-2.4-.9-2 3.4 2 1.6a8 8 0 0 0 0 2.2l-2 1.6 2 3.4 2.4-.9c.6.5 1.2.8 1.9 1.1l.4 2.6h4l.4-2.6c.7-.3 1.3-.6 1.9-1.1l2.4.9 2-3.4-2-1.5Z"/></svg></button>
   </div>
  </section>
@@ -91,11 +92,14 @@
   </ul>
   <div class="mixes" id="mixList"></div>
   <div class="rules">
-    <div><span class="st3"></span><i class="ico flag"></i></div>
-    <div><span class="st2"></span><i class="ico flag"></i><b>+1</b></div>
-    <div><i class="ico bulb"></i><span class="st2"></span><b>max</b></div>
+    <div><span class="st3"></span><i class="ico flag"></i><b>+1</b></div>
+    <div><span class="st2"></span><b>a few more</b></div>
+    <div><i class="ico bulb"></i><span class="st3"></span><b>OK</b></div>
   </div>
-  <button class="cbtn big green" id="btnReplayTut"><span class="lbl">TUTORIAL</span> <span>▶</span></button>
+  <div class="help-btns">
+    <button class="cbtn big green" id="btnReplayTut"><span class="lbl">TUTORIAL</span> <span>▶</span></button>
+    <button class="cbtn big blue" id="btnTipsAgain"><span class="lbl">TIPS</span> <span>💬</span></button>
+  </div>
 </dialog>
 
 <dialog id="dlgEnd" class="panel win">
@@ -116,6 +120,7 @@
   <div class="burst" aria-hidden="true"></div>
   <div class="stars big" id="lvStars"></div>
   <div class="statrow" id="lvSub"></div>
+  <div class="gift" id="giftBar" role="img"><span class="gi">🎁</span><span class="gtrack"><span class="gfill" id="giftFill"></span></span><b id="giftTxt"></b></div>
   <div class="btnrow">
     <button class="cbtn round white" id="btnMap2" aria-label="Level map"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14m6-12v14"/></svg></button>
     <button class="cbtn big green" id="btnNext" autofocus><span class="lbl">NEXT</span> <span>▶</span></button>
@@ -146,13 +151,15 @@
   <div class="ribbon pink">Settings</div>
   <button class="cbtn round red x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   <div class="toggles">
+    <label class="tgl"><input type="checkbox" id="optMusic"><span class="tg-ic">🎵</span><span class="tg-lb">Music</span></label>
     <label class="tgl"><input type="checkbox" id="optSound"><span class="tg-ic">🔊</span><span class="tg-lb">Sound</span></label>
     <label class="tgl"><input type="checkbox" id="optVibe"><span class="tg-ic">📳</span><span class="tg-lb">Buzz</span></label>
     <label class="tgl"><input type="checkbox" id="optPatterns"><span class="tg-ic pat"><i></i><i></i><i></i></span><span class="tg-lb">Patterns</span></label>
   </div>
+  <label class="vol" for="optMusicVol"><span class="vi">🎵</span><span class="vl">Music volume</span><input type="range" id="optMusicVol" min="0" max="100" step="1" value="18"><b id="musicVolTxt">18%</b></label>
 </dialog>
 
-<script src="js/engine.js?v=5"></script>
-<script src="js/game.js?v=5"></script>
+<script src="js/engine.js?v=6"></script>
+<script src="js/game.js?v=6"></script>
 </body>
 </html>

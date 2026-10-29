@@ -104,10 +104,14 @@ async function run(browser, tag, ctxOpts, full, darkReader) {
   await solve(page);
   await page.waitForSelector("#dlgLevel[open]", { timeout: 4000 }); await page.waitForTimeout(800);
   console.log(tag, "L1 stars:", await page.evaluate(() => PS.progress.stars[1]));
-  for (const L of [5, 10, 20]) {
+  for (const L of [5, 10, 12, 20]) {
     await go("&level=" + L);
     const cc = await colourCheck(page, tag);
     await page.screenshot({ path: out + "level" + L + sfx + ".png" });
+    if (L === 12 && full) { // glass close-up of the board (locked glass has bolts)
+      const bb = await page.evaluate(() => { const r = document.querySelector("#board canvas").getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; });
+      await page.screenshot({ path: out + "glass-closeup-locked.png", clip: bb });
+    }
     if (L === 10 && full) { // undo + hint + stuck
       const m = await page.evaluate(() => { const E = PS.E, p = PS.puzzle, s = PS.state.pos; return E.glideMoves(p, s).find(x => E.distOf(p, x.pos) !== E.distOf(p, s) - 1); });
       if (m) { await swipe(page, m.pane, m.dir); await page.waitForTimeout(300); await page.screenshot({ path: out + "level10-after-wrong-move.png" }); await page.click("#btnUndo"); await idle(page); }
@@ -117,6 +121,7 @@ async function run(browser, tag, ctxOpts, full, darkReader) {
     }
     await solve(page);
     await page.waitForSelector("#dlgLevel[open], #dlgMile[open]", { timeout: 4000 });
+    if (L === 12 && full) { await page.waitForTimeout(1500); await page.screenshot({ path: out + "level-end-gift.png" }); }
     console.log(tag, "L" + L, "par", await page.evaluate(() => PS.puzzle.par), "moves", await page.evaluate(() => PS.state.moves), "stars", await page.evaluate(n => PS.progress.stars[n], L), JSON.stringify(cc));
   }
   // map with progress: the bottom of the map (level 1) must be clear of the PLAY bar
@@ -128,7 +133,31 @@ async function run(browser, tag, ctxOpts, full, darkReader) {
   await page.screenshot({ path: out + "map-bottom" + sfx + ".png" });
   console.log(tag, "map bottom: every node clear of PLAY bar:", clear);
   if (!clear) errors.push(tag + " a map node is covered by the PLAY bar");
-  if (full) { await go(""); await page.click("#btnHelp"); await page.waitForTimeout(900); await page.screenshot({ path: out + "help.png" }); }
+  if (full) {
+    await go(""); await page.click("#btnHelp"); await page.waitForTimeout(900); await page.screenshot({ path: out + "help.png" });
+    await go(""); await page.screenshot({ path: out + "home-music.png" });
+    await page.mouse.click(5, 5); await page.waitForTimeout(400);
+    const m1 = await page.evaluate(() => PS.music);
+    await page.click("#btnMusic"); await page.waitForTimeout(300);
+    const m2 = await page.evaluate(() => PS.music);
+    await page.screenshot({ path: out + "home-music-off.png" });
+    await page.click("#btnMusic"); await page.waitForTimeout(300);
+    console.log(tag, "music after first tap:", JSON.stringify(m1), "after mute:", JSON.stringify(m2), "after unmute:", JSON.stringify(await page.evaluate(() => PS.music)));
+    if (!m1.playing || m2.playing || m1.vol !== 0.18) errors.push(tag + " music toggle did not behave");
+    await page.click("#btnHomeSettings"); await page.waitForTimeout(800); await page.screenshot({ path: out + "settings.png" });
+    // coach marks (tests switch them off unless &marks=1)
+    await go("&marks=1"); await page.waitForTimeout(1200);
+    console.log(tag, "home mark:", await page.evaluate(() => PS.markShown)); await page.screenshot({ path: out + "tooltip-music.png" });
+    await go("&level=1&marks=1"); await page.waitForTimeout(1200);
+    console.log(tag, "L1 mark:", await page.evaluate(() => PS.markShown)); await page.screenshot({ path: out + "tooltip-glide.png" });
+    await go("&level=12&marks=1"); await page.waitForTimeout(1200);
+    let k = await page.evaluate(() => PS.markShown), guard = 0;
+    while (k && k !== "locked" && guard++ < 8) { await page.mouse.click(30, 400); await page.waitForTimeout(900); k = await page.evaluate(() => PS.markShown); }
+    console.log(tag, "L12 mark:", k); await page.screenshot({ path: out + "tooltip-locked.png" });
+    if (k !== "locked") errors.push(tag + " locked-glass tip did not show");
+    await page.mouse.click(30, 400); await page.waitForTimeout(600);
+    console.log(tag, "after tap, mark:", await page.evaluate(() => PS.markShown), "seen:", await page.evaluate(() => JSON.parse(localStorage.getItem("ps2:prefs")).marks.join(",")));
+  }
   await ctx.close();
 }
 (async () => {
