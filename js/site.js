@@ -38,6 +38,7 @@
   // ---------- analytics (off by default): GoatCounter, no cookies ----------
   function loadAnalytics() {
     if (!C.ANALYTICS_ENABLED || !/^[a-z0-9-]+$/.test(C.GOATCOUNTER_CODE || "")) return;
+    if (navigator.doNotTrack === "1" || window.doNotTrack === "1" || navigator.globalPrivacyControl) return; // honour Do Not Track / GPC
     if (/^(localhost|127\.)/.test(location.hostname) || /[?&]test=1/.test(location.search)) return;
     var s = document.createElement("script"); s.async = true;
     s.setAttribute("data-goatcounter", "https://" + C.GOATCOUNTER_CODE + ".goatcounter.com/count");

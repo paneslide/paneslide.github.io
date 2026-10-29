@@ -9,8 +9,8 @@ window.PANESLIDE_CONFIG = {
   ADSENSE_CLIENT: "",                           // e.g. "ca-pub-1234567890123456" (from AdSense)
   ADSENSE_SLOTS: { guide: "", game: "" },       // ad unit ids from AdSense, optional
 
-  ANALYTICS_ENABLED: false,                     // GoatCounter: cookie-free page counts
-  GOATCOUNTER_CODE: "",                         // e.g. "paneslide" for https://paneslide.goatcounter.com
+  ANALYTICS_ENABLED: true,                      // GoatCounter: cookie-free page counts
+  GOATCOUNTER_CODE: "paneslide",                   // e.g. "paneslide" for https://paneslide.goatcounter.com
 
-  GSC_VERIFICATION: ""                          // Google Search Console "HTML tag" content value
+  GSC_VERIFICATION: "7S4GQYaTbJS-Dnz3o4ANliwa0B3Ipah4RROmUfHCVzE"                       // Google Search Console "HTML tag" content value
 };

@@ -79,7 +79,7 @@ function headTags(p) {
 <meta name="theme-color" content="#3B1F7A">
 <title>${esc(p.title)}</title>
 <meta name="description" content="${esc(p.desc)}">
-<link rel="canonical" href="${url}">${p.noindex ? '\n<meta name="robots" content="noindex">' : ""}${CFG.GSC_VERIFICATION && p.url === "/" ? `\n<meta name="google-site-verification" content="${esc(CFG.GSC_VERIFICATION)}">` : ""}
+<link rel="canonical" href="${url}">${p.noindex ? '\n<meta name="robots" content="noindex">' : ""}${CFG.GSC_VERIFICATION ? `\n<meta name="google-site-verification" content="${esc(CFG.GSC_VERIFICATION)}">` : ""}
 <meta property="og:type" content="${p.ogType || "website"}">
 <meta property="og:site_name" content="PaneSlide">
 <meta property="og:title" content="${esc(p.ogTitle || p.title)}">
