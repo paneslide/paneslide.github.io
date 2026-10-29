@@ -1,5 +1,5 @@
 // Website-layer test: every page in Chromium light, prefers-dark and forced-dark, Firefox dark,
-// at 360x740 and 412x915. Checks console/page errors, failed requests, horizontal overflow,
+// at 360x740 and 412x915 (ONLY=desktop: Chromium light and dark at 768x1024, 1280x800, 1440x900, 1920x1080). Checks console/page errors, failed requests, horizontal overflow,
 // broken images, one <h1>, alt text, the archive (?date=) rules and the progress code.
 //   PW=$(npm root -g)/playwright-core node tools/test-site.js [base=http://127.0.0.1:8765]
 const pw = require(process.env.PW || "playwright-core"), fs = require("fs"), path = require("path");
@@ -7,7 +7,8 @@ const BASE = process.argv[2] || "http://127.0.0.1:8765", ROOT = path.join(__dirn
 const chrome = { executablePath: process.env.CHROME || "/usr/bin/google-chrome", args: ["--no-sandbox"] };
 const urls = [...fs.readFileSync(path.join(ROOT, "sitemap.xml"), "utf8").matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1].replace(/^https?:\/\/[^/]+/, ""));
 urls.push("/404.html");
-const SIZES = [[360, 740], [412, 915]];
+let SIZES = [[360, 740], [412, 915]];
+const DESKTOP = [[768, 1024], [1280, 800], [1440, 900], [1920, 1080]]; // v10: tablet + laptop/desktop (ONLY=desktop)
 // reuse the real-swipe solvers from the game test (idle, swipe, drag, solveClassic, solve)
 const GS = fs.readFileSync(path.join(__dirname, "screens-game.js"), "utf8");
 eval(GS.slice(GS.indexOf("async function idle"), GS.indexOf("async function colourCheck")));
@@ -82,6 +83,7 @@ async function gameRules(browser) {
   if (!only || only === "light") { const b = await pw.chromium.launch(chrome); await run(b, "chromium-light", {}); await gameRules(b); await b.close(); }
   if (!only || only === "dark") { const b = await pw.chromium.launch(chrome); await run(b, "chromium-dark", { colorScheme: "dark" }); await b.close(); }
   if (!only || only === "forcedark") { const b = await pw.chromium.launch({ executablePath: chrome.executablePath, args: ["--no-sandbox", "--force-dark-mode", "--enable-features=WebContentsForceDark"] }); await run(b, "forced-dark", { colorScheme: "dark" }); await b.close(); }
+  if (!only || only === "desktop") { const keep = SIZES; SIZES = DESKTOP; const b = await pw.chromium.launch(chrome); await run(b, "desktop-light", {}); await run(b, "desktop-dark", { colorScheme: "dark" }); await b.close(); SIZES = keep; }
   if (!only || only === "firefox") { const b = await pw.firefox.launch(); await run(b, "firefox-dark", { colorScheme: "dark" }); await b.close(); }
   console.log(fails ? `FAILED: ${fails} problem(s)` : `OK: ${urls.length} pages, no problems`);
   process.exit(fails ? 1 : 0);

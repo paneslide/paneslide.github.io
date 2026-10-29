@@ -131,7 +131,17 @@
   function isMilestone(N) { return N === 5 || N % 10 === 0; }
 
   var view = "home";
+  // ---------- anonymous game events (GoatCounter, see js/site.js; nothing is sent when analytics is off, under DNT/GPC, or in tests) ----------
+  function track(path, title) { (window.psq = window.psq || []).push([path, title || path]); if (window.PaneSlideSite && window.PaneSlideSite.flush) window.PaneSlideSite.flush(); }
+  function pad3(N) { return ("00" + N).slice(-Math.max(3, String(N).length)); }
+  function timeBucket(ms) { var s = ms / 1000; return s < 30 ? "under-30s" : s < 60 ? "30-60s" : s < 120 ? "1-2min" : s < 300 ? "2-5min" : "5min-plus"; }
+  function overPar(m) { var o = m - parOf(puz); return o <= 0 ? "par" : "par+" + Math.min(o, 9); }
+  function quitCheck(how) {
+    if (mode === "level" && state && state.status === "playing" && !state.quitSent && view === "play") { track("level/" + pad3(puz.level) + (how === "restart" ? "/restart" : "/quit"), "Level " + puz.level + (how === "restart" ? " restarted (" : " left unsolved (") + how + ", " + state.moves + " swipes)"); state.quitSent = true; }
+  }
+  window.addEventListener("pagehide", function () { quitCheck("closed"); });
   function showView(v) {
+    if (v !== "play") quitCheck("back");
     view = v; document.body.dataset.view = v;
     $("homeView").hidden = v !== "home"; $("mapView").hidden = v !== "map"; $("playView").hidden = !(v === "play" || v === "tutorial");
     $("btnBack").style.visibility = (v === "home" || v === "tutorial") ? "hidden" : "visible";
@@ -146,6 +156,7 @@
   var CAL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>';
   function levelUI(on) { if (!on) { var gc = $("gemCt"); if (gc) gc.hidden = true; } $("btnHint").hidden = !on; $("btnRestart").hidden = !on; $("starLine").hidden = false; $("btnUndo").hidden = !(puz && puz.glide && mode !== "tutorial"); }
   function startHome() {
+    quitCheck("back");
     hideCoach(true); clearHint(); mode = "home"; locked = true; applyTheme(null);
     if (practice) { date = today; practice = false; try { history.replaceState(null, "", location.pathname); } catch (e) {} } // leaving an archive day: DAILY means today again
     var lv = $("playLv"); lv.textContent = "Level " + prog.unlocked;
@@ -160,12 +171,14 @@
     showView("home");
   }
   function startDaily() {
+    quitCheck("back");
     hideCoach(true); applyTheme(null); levelUI(false);
     mode = "daily"; puz = E.generate(date); n = puz.n; GKEY = "ps2:game:" + date; levelUI(false);
     state = load(GKEY, null);
     if (!state || !Array.isArray(state.pos) || state.pos.length !== puz.panes.length || (puz.glide && state.status === "playing" && !E.validState(puz, state.pos))) state = { pos: puz.start.slice(), moves: 0, hist: [], status: "playing" };
     state.undo = state.undo || [];
     locked = state.status !== "playing";
+    if (!locked) { state.t0 = Date.now(); if (practice) track("archive/play/" + daysAgoBucket(date), "Archive day played (" + daysAgoBucket(date) + " old)"); else track("daily/start", "Daily puzzle opened"); }
     setRule("");
     $("btnSkip").hidden = true; $("status").hidden = false;
     setBadge(CAL_SVG, practice ? "Practice" : "Daily", practice ? date.slice(5) : "#" + puz.number);
@@ -173,9 +186,12 @@
     if (state.status === "won") { $("board").classList.add("won"); setTimeout(openEnd, 500); }
     else if (!practice) { mark("everyone", "lvBadge", 600); mark("stars", "status"); }
   }
+  function daysAgoBucket(d) { var k = 0, x = d; while (x < today && k < 400) { x = E.addDays(x, 1); k++; } return k <= 1 ? "1-day" : k <= 7 ? "2-7-days" : k <= 30 ? "8-30-days" : "31-days-plus"; }
   function startTutorial() {
+    quitCheck("back");
     mode = "tutorial"; puz = E.tutorial(); n = puz.n; GKEY = null;
     state = { pos: puz.start.slice(), moves: 0, hist: [], undo: [], status: "playing" }; locked = false;
+    track("tutorial/start", "Tutorial started");
     setRule("");
     $("btnSkip").hidden = false; $("status").hidden = true; levelUI(false); applyTheme(null);
     setBadge("👆", "Tutorial", "1 / 2");
@@ -183,7 +199,7 @@
   }
   function ensureLevels(cb) {
     if (window.PANESLIDE_LEVELS) return cb();
-    var sc = document.createElement("script"); sc.src = "js/levels.js?v=9"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+    var sc = document.createElement("script"); sc.src = "js/levels.js?v=10"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
   }
   function getLevel(N) {
     var D = window.PANESLIDE_LEVELS;
@@ -193,10 +209,13 @@
   var tipShown = null, tipT;
   function flashTip(t, ms) { tipShown = t; var r = $("rule"); r.textContent = t; r.classList.remove("coaching"); void r.offsetWidth; r.classList.add("coaching"); clearTimeout(tipT); if (ms) tipT = setTimeout(function () { if (tipShown === t) { tipShown = null; r.classList.remove("coaching"); } }, ms); }
   function startLevel(N) {
+    quitCheck("restart");
     ensureLevels(function () {
       hideCoach(true); clearHint();
       mode = "level"; puz = getLevel(N); n = puz.n; GKEY = null; locked = false;
-      state = { pos: puz.start.slice(), moves: 0, hist: [], undo: [], status: "playing", hinted: false, got: [], thawed: {}, reveal: 0 };
+      state = { pos: puz.start.slice(), moves: 0, hist: [], undo: [], status: "playing", hinted: false, got: [], thawed: {}, reveal: 0, nh: 0, nu: 0, t0: Date.now() };
+      track("level/" + pad3(N) + "/start", "Level " + N + " started");
+      if (puz.teach && N >= prog.unlocked) track("mechanic/" + puz.teach + "/first-seen", "New glass first seen: " + puz.teach + " (level " + N + ")");
       var ch = chapterOf(N); applyTheme(ch);
       $("btnSkip").hidden = true; $("status").hidden = false; levelUI(true);
       setBadge(puz.boss ? "👑" : puz.challenge ? "🏆" : puz.breather ? "🌿" : ch.icon, puz.boss ? "Boss" : "Level", N);
@@ -243,11 +262,14 @@
   function buzz(ms) { if (prefs.vibe && navigator.vibrate) try { navigator.vibrate(ms); } catch (e) {} }
 
   // ---------- layout ----------
-  var CELL = 64, GAP = 6, PAD = 10, STEP = 70, paneEls = [], gripEls = [], trackEl, boardEl;
+  var CELL = 64, GAP = 6, PAD = 10, STEP = 70, paneEls = [], gripEls = [], trackEl, boardEl, hoverPi = -1;
+  function isDesk() { return window.innerWidth >= 960 && window.innerHeight >= 560; } // laptop / desktop layout (css: same media query)
   function measure() {
-    var avail = Math.min(window.innerWidth, 520) - 32 - PAD * 2 - GAP * (n - 1);
-    var maxH = window.innerHeight - (mode === "tutorial" ? 330 : 410); // keep the whole game on one phone screen
-    CELL = Math.max(40, Math.min(n <= 3 ? 84 : 76, Math.floor(avail / n), Math.floor((maxH - PAD * 2 - GAP * (n - 1)) / n)));
+    var W = window.innerWidth, desk = isDesk(), wide = W >= 700; // phones (< 700px wide) keep the v9 sizes exactly
+    var avail = desk ? Math.min(W - 640, 620) : Math.min(W, wide ? 640 : 520) - 32 - PAD * 2 - GAP * (n - 1);
+    if (desk) avail -= PAD * 2 + GAP * (n - 1);
+    var maxH = window.innerHeight - (desk ? 190 : mode === "tutorial" ? 330 : 410); // keep the whole game on one screen
+    CELL = Math.max(40, Math.min(wide ? (n <= 3 ? 110 : 100) : (n <= 3 ? 84 : 76), Math.floor(avail / n), Math.floor((maxH - PAD * 2 - GAP * (n - 1)) / n)));
     GAP = CELL >= 56 ? 6 : 5; STEP = CELL + GAP;
     var r = document.documentElement.style;
     r.setProperty("--cell", CELL + "px"); r.setProperty("--gap", GAP + "px"); r.setProperty("--pad", PAD + "px");
@@ -280,7 +302,7 @@
   function swatchHTML(mask, cls) { return "<canvas class='swatch" + (cls ? " " + cls : "") + "' data-mask='" + mask + "' aria-hidden='true'></canvas>"; }
   function paintSwatches(root) { root.querySelectorAll("canvas.swatch").forEach(function (cv) { paintSwatch(cv, cv.classList.contains("res") ? 30 : 24, +cv.dataset.mask); }); }
   function paintTarget() {
-    var t = $("target"), tc = n <= 3 ? 28 : n === 4 ? 24 : n === 5 ? 21 : 18, g = 3, side = n * tc + (n - 1) * g;
+    var t = $("target"), tc = Math.round((n <= 3 ? 28 : n === 4 ? 24 : n === 5 ? 21 : 18) * (isDesk() ? 1.6 : 1)), g = 3, side = n * tc + (n - 1) * g;
     t.innerHTML = ""; t.style.gridTemplateColumns = "none";
     var cv = el("canvas", "tcv", t), x = hiDPI(cv, side + 8, side + 8);
     x.fillStyle = (getComputedStyle(document.body).getPropertyValue("--frame2") || "").trim() || "#D9CCF7"; rr(x, 0, 0, side + 8, side + 8, 10); x.fill();
@@ -378,7 +400,7 @@
     }
     return { cv: body, deco: deco, W: W, H: H };
   }
-  function makeTiles() { paneSprites = puz.panes.map(function (p, i) { return makeSprite(p, i); }); glassCv = document.createElement("canvas"); }
+  function makeTiles() { hoverPi = -1; paneSprites = puz.panes.map(function (p, i) { return makeSprite(p, i); }); glassCv = document.createElement("canvas"); }
   // ---------- v8 mechanic drawing ----------
   function cellIs(kind, k) { return !!(puz && puz[kind] && puz[kind].indexOf(k) >= 0); }
   function flake(x, cx, cy, r, col, w) { x.save(); x.strokeStyle = col; x.lineWidth = w; x.lineCap = "round"; for (var a = 0; a < 3; a++) { var t = a * Math.PI / 3, dx = Math.cos(t) * r, dy = Math.sin(t) * r; x.beginPath(); x.moveTo(cx - dx, cy - dy); x.lineTo(cx + dx, cy + dy); x.stroke(); [-1, 1].forEach(function (s) { var bx = cx + s * dx * 0.6, by = cy + s * dy * 0.6, q = r * 0.28; x.beginPath(); x.moveTo(bx + Math.cos(t + 2.4) * q * s, by + Math.sin(t + 2.4) * q * s); x.lineTo(bx, by); x.lineTo(bx + Math.cos(t - 2.4) * q * s, by + Math.sin(t - 2.4) * q * s); x.stroke(); }); } x.restore(); }
@@ -462,6 +484,7 @@
         var px = PAD + o[0] + cl[1] * STEP, py = PAD + o[1] + cl[0] * STEP;
         if (prefs.patterns) patternInto(x, E.BIT[p.color], px, py, CELL);
       });
+      if (!focus && !hinted && hoverPi === i && !p.locked) { var hs = paneSprites[i]; if (!hs.hoverRim) hs.hoverRim = band(p, hs.W, hs.H, 0, 3, "rgba(255,255,255,.95)"); x.drawImage(hs.hoverRim, PAD + o[0], PAD + o[1], hs.W, hs.H); }
       if (focus || hinted) { var sp = paneSprites[i], key = hinted ? "hintRim" : "focusRim"; if (!sp[key]) sp[key] = band(p, sp.W, sp.H, 0, 4.5, hinted ? "#FFB800" : "#6A46EA"); x.drawImage(sp[key], PAD + o[0], PAD + o[1], sp.W, sp.H); }
     });
   }
@@ -514,6 +537,8 @@
       pe.style.width = p.w * STEP - GAP + "px"; pe.style.height = p.h * STEP - GAP + "px";
       pe.addEventListener("keydown", function (e) { keyMove(e, pi); });
       pe.addEventListener("focus", paint); pe.addEventListener("blur", paint);
+      pe.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") { hoverPi = pi; paint(); } });
+      pe.addEventListener("pointerleave", function (e) { if (hoverPi === pi) { hoverPi = -1; paint(); } });
       paneEls.push(pe);
       var ow = puz.oneway && puz.oneway[pi];
       var gr = el("div", "grip" + (p.locked ? " lock" : "") + (ow ? " oneway" : ""), boardEl); gr.innerHTML = p.locked ? LOCK_SVG : arrowSVG(p.axis, ow); gripEls.push(gr);
@@ -635,8 +660,9 @@
     paneEls[d.pi].classList.remove("dragging", "lifted"); gripEls[d.pi].classList.remove("dragging"); showTrack(d.pi, false);
     commit(d.pi, d.last);
   }
+  var KEYDIR = { w: "ArrowUp", a: "ArrowLeft", s: "ArrowDown", d: "ArrowRight" };
   function keyMove(e, pi) {
-    if (locked) return; var p = puz.panes[pi], k = e.key, v = state.pos[pi];
+    if (locked || e.ctrlKey || e.metaKey || e.altKey) return; var p = puz.panes[pi], k = KEYDIR[e.key.length === 1 ? e.key.toLowerCase() : e.key] || e.key, v = state.pos[pi];
     if (p.locked) return;
     if (puz.glide) {
       var d = p.axis === "h" ? (k === "ArrowRight" ? 1 : k === "ArrowLeft" ? -1 : 0) : (k === "ArrowDown" ? 1 : k === "ArrowUp" ? -1 : 0);
@@ -682,7 +708,7 @@
     if (locked || anims.length || !state.undo || !state.undo.length) return;
     var prev = state.undo.pop(), pi = -1;
     prev.forEach(function (v, i) { if (v !== state.pos[i]) pi = i; });
-    state.pos = prev.slice(); clearHint();
+    state.pos = prev.slice(); clearHint(); state.nu = (state.nu || 0) + 1;
     if (pi >= 0) place(pi, prev[pi], 200);
     sfx.tap(); buzz(6); updateUndo();
     if (mode === "daily") save(GKEY, state);
@@ -802,6 +828,12 @@
   function win() {
     state.status = "won"; locked = true; hideCoach(true);
     clearHint();
+    var tb = timeBucket(Date.now() - (state.t0 || Date.now()));
+    if (mode === "tutorial") track("tutorial/complete", "Tutorial completed");
+    else if (mode === "daily" && !state.recorded) track((practice ? "archive/solve/" : "daily/solve/") + overPar(state.moves) + "/" + tb, (practice ? "Archive" : "Daily") + " solved, " + overPar(state.moves) + ", " + tb);
+    else if (mode === "level") { var stw = starsFor(state.moves), op = overPar(state.moves);
+      track("level/" + pad3(puz.level) + "/" + (op === "par" ? "complete" : "over-par") + "/" + stw + "star/" + op + "/hints" + Math.min(state.nh || 0, 5) + "/undo" + Math.min(state.nu || 0, 9) + "/" + tb,
+        "Level " + puz.level + " solved: " + stw + "★, " + op + ", hints " + (state.nh || 0) + ", undo " + (state.nu || 0) + ", " + tb); }
     if (mode === "daily") { save(GKEY, state); recordStats(); }
     var after = openEnd;
     if (mode === "level") after = recordLevel();
@@ -853,15 +885,18 @@
   }
   function statsHTML(hl) {
     var parPct = stats.played ? Math.round(stats.dist[0] / stats.played * 100) : 0, max = Math.max.apply(null, stats.dist.concat([1]));
-    var tile = function (ico, v, lab) { return "<div class='tile' aria-label='" + lab + "'><i class='ico " + ico + "'></i><b>" + v + "</b></div>"; };
+    var tile = function (ico, v, lab) { return "<div class='tile' role='group' aria-label='" + lab + ": " + v + "'><i class='ico " + ico + "' aria-hidden='true'></i><b>" + v + "</b><small>" + lab + "</small></div>"; };
     var ri = rankIndex(prog.unlocked - 1);
     var h = "<div class='sect'><i class='ico pad'></i>Daily</div><div class='tiles'>" + tile("pad", stats.played, "Played") + tile("fire", currentStreak(), "Streak") + tile("trophy", stats.best, "Best streak") + "</div>";
-    var labels = [starsHTML(3), "<i class='ico flag'></i>+1", "<i class='ico flag'></i>+2", "<i class='ico flag'></i>+3"];
-    h += "<div class='dist'>" + stats.dist.map(function (v, i) { return "<div class='bar" + (hl === i ? " me" : "") + "'><span class='lb'>" + labels[i] + "</span><b style='width:" + Math.max(10, Math.round(v / max * 100)) + "%'>" + v + "</b></div>"; }).join("") + "</div>";
-    h += "<div class='sect'><i class='ico medal'></i>Levels</div><div class='tiles'>" + tile("star", totalStars(), "Stars") + tile("flag", prog.unlocked - 1, "Levels cleared") + tile("spark", prog.bestPerf || 0, "Best perfect run") + "</div>";
+    var labels = ["Par", "Par +1", "Par +2", "Par +3 or more"], short = ["Par", "+1", "+2", "+3"];
+    h += "<div class='dist' role='list' aria-label='Daily results by moves over par'><div class='dhead'><span>Moves over par</span><span>" + parPct + "% at par</span></div>" + stats.dist.map(function (v, i) {
+      var w = v ? Math.max(6, Math.round(v / max * 100)) : 0;
+      return "<div class='drow" + (hl === i ? " me" : "") + "' role='listitem' aria-label='" + labels[i] + ": " + v + "'><span class='dl'>" + (i === 0 ? "<i class='ico star' aria-hidden='true'></i>" : "") + short[i] + "</span><span class='dt'><span class='df' style='width:" + w + "%'></span></span><b class='dn'>" + v + "</b></div>";
+    }).join("") + "</div>";
+    h += "<div class='sect'><i class='ico medal'></i>Levels</div><div class='tiles'>" + tile("star", totalStars(), "Stars") + tile("flag", prog.unlocked - 1, "Levels cleared") + tile("spark", prog.bestPerf || 0, "3★ run") + "</div>";
     if (ri >= 0) h += "<div class='tiles' style='margin-top:8px'><div class='tile wide'><i class='ico medal'></i><b>" + RANKS[ri][1] + "</b></div></div>";
     h += "<div class='sect'><i class='ico trophy'></i>Records</div><div class='tiles'>" + tile("spark", Object.keys(prog.perfSet).length, "Perfect levels") + tile("gem", prog.gemTotal, "Gems") + tile("crown", prog.boss.length, "Bosses") + "</div>";
-    h += "<div class='tiles' style='margin-top:8px'>" + tile("shard", prog.shards, "Shards") + tile("gift", prog.login.best || 0, "Best gift streak") + tile("fire", prog.bestPerf || 0, "Best perfect run") + "</div>";
+    h += "<div class='tiles' style='margin-top:8px'>" + tile("shard", prog.shards, "Shards") + tile("gift", prog.login.best || 0, "Gift streak") + tile("bulb", prog.hints, "Hints") + "</div>";
     h += "<div class='sect'><i class='ico medal'></i>Badges " + prog.ach.length + "/" + ACH.length + "</div><div class='achs'>" + ACH.map(function (a) { var got = prog.ach.indexOf(a[0]) >= 0; return "<div class='ach" + (got ? " got" : "") + "' aria-label='" + a[2] + (got ? ", earned" : ", " + a[3]) + "'><span class='ai'>" + (got ? a[1] : "🔒") + "</span><span class='at'><b>" + a[2] + "</b><small>" + a[3] + "</small></span></div>"; }).join("") + "</div>";
     return h;
   }
@@ -911,7 +946,7 @@
     var cand = puz.panes.map(function (p, i) { return i; }).filter(function (i) { return !puz.panes[i].locked && state.pos[i] !== puz.solution[i]; });
     if (!cand.length) return;
     var pi = cand[0], p = puz.panes[pi];
-    prog.hints--; lvSave(); updateHint();
+    prog.hints--; lvSave(); updateHint(); state.nh = (state.nh || 0) + 1;
     state.hinted = true; hintPi = pi; updateStarLine();
     ghostEl = el("div", "ghost", boardEl);
     var o = offset(p, puz.solution[pi]);
@@ -926,7 +961,7 @@
     if (!m) { if (E.distOf(puz, state.pos) < 0) { flashTip("↶ Undo first", 2200); buzz([8, 30, 8]); } return; }
     if (prog.hints <= 0) { toast("💡 0 · earn ⭐⭐⭐"); buzz([8, 30, 8]); return; }
     var p = puz.panes[m.pane];
-    prog.hints--; lvSave(); updateHint();
+    prog.hints--; lvSave(); updateHint(); state.nh = (state.nh || 0) + 1;
     state.hinted = true; hintPi = m.pane; updateStarLine();
     ghostEl = el("div", "ghost", boardEl);
     var o = offset(p, m.to);
@@ -1058,6 +1093,7 @@
     path.insertBefore(svg, path.firstChild);
   }
   function openMap() {
+    quitCheck("back");
     hideCoach(true); clearHint(); mode = "map"; locked = true;
     applyTheme(chapterOf(prog.unlocked));
     var ri = rankIndex(prog.unlocked - 1);
@@ -1119,10 +1155,10 @@
   }
   function buy(id) {
     var parts = id.split(":"), kind = parts[0], key = parts[1];
-    if (kind === "hint") { if (prog.shards < 15 || prog.hints >= HINT_MAX) return; prog.shards -= 15; prog.hints++; updateHint(); toast("💡 +1 hint"); }
+    if (kind === "hint") { if (prog.shards < 15 || prog.hints >= HINT_MAX) return; prog.shards -= 15; prog.hints++; updateHint(); toast("💡 +1 hint"); track("shop/buy/hint", "Shop: bought a hint"); }
     else {
       var item = kind === "skin" ? SKINS[key] : MOODS[key]; if (!item) return;
-      if (prog.own.indexOf(key) < 0) { if (prog.shards < item.price) return; prog.shards -= item.price; prog.own.push(key); toast("✨ " + item.name + "!"); }
+      if (prog.own.indexOf(key) < 0) { if (prog.shards < item.price) return; prog.shards -= item.price; prog.own.push(key); toast("✨ " + item.name + "!"); track("shop/buy/" + kind + "-" + key, "Shop: bought " + item.name); }
       if (kind === "skin") { prog.skin = key; WELL = item.well; } else { prog.mood = key; music.mood(); }
     }
     lvSave(); syncHud(); sfx.star(2); buzz(10); openShop();
@@ -1140,6 +1176,7 @@
     var g = giftState(); if (!g.ready) return;
     var L = prog.login, amt = GIFT[g.day - 1];
     L.streak = L.last === E.addDays(today, -1) ? (L.streak || 0) + 1 : 1; L.best = Math.max(L.best || 0, L.streak); L.last = today; L.day = g.day;
+    track("gift/claim/day" + g.day, "Daily gift claimed, day " + g.day);
     prog.shards += amt; if (g.day === 7 && prog.hints < HINT_MAX) prog.hints++;
     lvSave(); syncHud(); updateHint(); sfx.medal(); buzz([10, 40, 20]); openGift(); confetti(true); toast("🎁 +" + amt + " shards"); checkAch();
   }
@@ -1405,6 +1442,7 @@
   })();
   function syncMusicBtn() { var b = $("btnMusic"); b.classList.toggle("off", !prefs.music); b.setAttribute("aria-pressed", prefs.music ? "true" : "false"); b.setAttribute("aria-label", prefs.music ? "Music on, tap to mute" : "Music off, tap to play"); }
   function setMusic(on) {
+    if (!!on !== !!prefs.music) track(on ? "music/on" : "music/mute", on ? "Music switched on" : "Music muted");
     prefs.music = !!on; save("ps2:prefs", prefs); syncMusicBtn();
     var o = $("optMusic"); if (o) { o.checked = prefs.music; syncToggles(); }
     if (prefs.music) { if (prefs.musicVol < 0.03) { prefs.musicVol = 0.18; $("optMusicVol").value = 18; $("musicVolTxt").textContent = "18%"; save("ps2:prefs", prefs); } music.start(); } else music.stop();
@@ -1453,6 +1491,35 @@
     b.addEventListener("pointerdown", onDown); b.addEventListener("pointermove", onMove);
     b.addEventListener("pointerup", onUp); b.addEventListener("pointercancel", onUp);
     document.addEventListener("pointerdown", function (e) { var t = e.target.closest && e.target.closest(".cbtn, .tgl, .node"); if (t && !t.disabled) { actx(); sfx.tap(); buzz(6); } }, true);
+    // v10 keyboard: Tab / 1–9 pick a pane, arrows or WASD slide it, Enter = next pane, Z or Ctrl+Z undo, H hint, M music
+    document.addEventListener("keydown", function (e) {
+      if (e.defaultPrevented || e.altKey || document.querySelector("dialog[open]")) return;
+      var t = e.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      var k = e.key.length === 1 ? e.key.toLowerCase() : e.key, ctl = e.ctrlKey || e.metaKey;
+      if (k === "m" && !ctl) { setMusic(!prefs.music); toast(prefs.music ? "🎵 Music on" : "🔇 Music off"); e.preventDefault(); return; }
+      if ($("playView").hidden || !paneEls.length) return;
+      var movable = paneEls.filter(function (pe, i) { return !puz.panes[i].locked; }), cur = paneEls.indexOf(document.activeElement);
+      function pick(el) { if (el) { el.focus(); paint(); } }
+      if (k === "z" && (ctl || !e.shiftKey)) { var u = $("btnUndo"); if (!u.hidden && !u.disabled) u.click(); e.preventDefault(); return; }
+      if (ctl) return;
+      if (k === "h") { var hb = $("btnHint"); if (!hb.hidden && !hb.disabled) hb.click(); e.preventDefault(); return; }
+      if (/^[1-9]$/.test(k)) { pick(paneEls[+k - 1]); e.preventDefault(); return; }
+      if (k === "Enter" || k === " ") { if ((cur >= 0 && k === " ") || (cur < 0 && t !== document.body && t !== document.documentElement)) return; /* let buttons keep Enter/Space */ var mi = movable.indexOf(paneEls[cur]); pick(movable[(mi + 1) % movable.length]); e.preventDefault(); return; }
+      var dir = KEYDIR[k] || (/^Arrow/.test(k) ? k : null);
+      if (dir && cur < 0) { // nothing picked yet: pick the first pane that slides that way
+        var ax = dir === "ArrowLeft" || dir === "ArrowRight" ? "h" : "v";
+        pick(paneEls.filter(function (pe, i) { var p = puz.panes[i]; return !p.locked && (p.axis === ax || p.axis === "b"); })[0] || movable[0]); e.preventDefault();
+      }
+    });
+    $("board").addEventListener("pointerdown", function (e) { if (e.pointerType === "mouse") document.body.classList.add("grabbing"); });
+    window.addEventListener("pointerup", function () { document.body.classList.remove("grabbing"); });
+    // v10: keep each panel's ribbon and ✕ fixed; only the content scrolls (no clipped headers on short screens)
+    document.querySelectorAll("dialog.panel").forEach(function (d) {
+      if (d.querySelector(":scope > .pscroll")) return;
+      var w = document.createElement("div"); w.className = "pscroll";
+      Array.prototype.slice.call(d.childNodes).forEach(function (n) { if (!(n.nodeType === 1 && (n.classList.contains("ribbon") || n.classList.contains("x")))) w.appendChild(n); });
+      d.appendChild(w);
+    });
     document.querySelectorAll("dialog [data-close]").forEach(function (x) { x.addEventListener("click", function () { x.closest("dialog").close(); }); });
     document.querySelectorAll("dialog").forEach(function (d) { d.addEventListener("click", function (e) { if (e.target === d) d.close(); }); });
     $("dlgEnd").addEventListener("close", function () { if (mode === "tutorial" && state.status === "won") { prefs.tutDone = true; prefs.glideTut = true; save("ps2:prefs", prefs); startDaily(); } });
@@ -1489,7 +1556,7 @@
     $("btnLvShare").addEventListener("click", function () { shareOut("PaneSlide Level " + puz.level + " " + "⭐".repeat(lastStars) + "\n" + SITE); });
     $("btnMileNext").addEventListener("click", function () { $("dlgMile").close(); startLevel(puz.level + 1); });
     $("btnMileShare").addEventListener("click", function () { var N = puz.level, ri = rankIndex(N); shareOut(mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark")); });
-    $("btnSkip").addEventListener("click", function () { prefs.tutDone = true; prefs.glideTut = true; save("ps2:prefs", prefs); hideCoach(true); startDaily(); });
+    $("btnSkip").addEventListener("click", function () { track("tutorial/skip", "Tutorial skipped"); prefs.tutDone = true; prefs.glideTut = true; save("ps2:prefs", prefs); hideCoach(true); startDaily(); });
     $("btnUndo").addEventListener("click", undo);
     $("btnHouse").addEventListener("click", function () { houseSel = null; openHouse(); });
     $("btnShop").addEventListener("click", openShop); $("chipShards").addEventListener("click", openShop);

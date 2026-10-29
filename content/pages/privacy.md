@@ -48,7 +48,26 @@ When ads are on, the following applies:
 
 {{ANALYTICS_STATUS}}
 
-GoatCounter does not use cookies and does not track you across websites. It records counts such as which pages were viewed, the referring site, browser and screen size, and a country derived from your IP address. According to GoatCounter's documentation it stores this as aggregate data and does not keep your IP address. You can read the [GoatCounter privacy policy](https://www.goatcounter.com/help/privacy).
+GoatCounter does not use cookies, does not store anything in your browser, and does not track you across websites. For each page view it records the page, the referring site, your browser and operating system name (for example "Chrome 130", "Android 15"), screen width, language, and a country worked out from your IP address. According to [GoatCounter's privacy policy](https://www.goatcounter.com/help/privacy), it stores these only as separate daily or hourly totals that cannot be linked together, and it does not store your IP address, your full browser string, or any tracking ID. To tell a repeat visit from a new one, GoatCounter keeps a random session number in memory for up to eight hours and then forgets it.
+
+### Game events we count
+
+Besides page views, the game counts a few anonymous **events**, so we can see which levels are too hard, where new players give up, and which features nobody uses. Each event is only a short name, counted the same way as a page view. The full list:
+
+- **Tutorial:** started, completed or skipped.
+- **Levels:** a level was started, solved, restarted or left unsolved. A solved level also records the level number, the stars (1 to 3), how many swipes over par, how many hints and undos were used (as small numbers), and the time taken in a rough band such as "1 to 2 minutes".
+- **New kinds of glass:** the first time a player reaches the level that introduces a new glass (for example ice or sand).
+- **Daily puzzle:** opened and solved (with swipes over par and a time band). **Archive:** a past day was played or solved, with a rough "how many days ago" band.
+- **Shop and gifts:** which shop item was bought with in-game shards (no real money exists in PaneSlide), and which day of the gift week was claimed.
+- **Music:** switched on or muted.
+- **App:** the install button was pressed, and the app was installed.
+- **Guides:** each guide page is counted as a page view, plus one event when a reader scrolls through three quarters of a guide.
+
+Events never include your name, email, progress code, the exact moves you made, or anything you type. They are not linked to each other or to an advertising ID. To keep the numbers small, the same event is counted at most once per browser tab session, at most 60 events are sent per session, and events are sent in small batches. To do this, PaneSlide keeps a short list of the event names it has already sent in your browser's session storage, which the browser deletes when you close the tab; it never leaves your device.
+
+### Turning analytics off
+
+If your browser sends a **Do Not Track** or **Global Privacy Control** signal, PaneSlide does not load GoatCounter at all, so no page views or events are sent. Content blockers that block GoatCounter also stop it; the game works exactly the same either way.
 
 ## Children
 
@@ -64,7 +83,7 @@ Depending on where you live, data-protection laws give you rights over your pers
 
 - **Access, correction and deletion.** You can ask what personal information we hold about you, ask us to correct it, or ask us to delete it. In practice we hold almost nothing: your game data is on your own device, and you can delete it yourself.
 - **Withdrawing consent.** Where we rely on consent (for example for personalised ads in the EEA and UK), you can withdraw it at any time through the consent message's privacy settings link, or by clearing this site's cookies.
-- **Legal bases (GDPR).** Saving your progress on your device is needed to provide the game you asked for. Ads that use cookies rely on your consent where the law requires it. Simple, cookie-free page counting relies on our legitimate interest in knowing how many people use the site.
+- **Legal bases (GDPR).** Saving your progress on your device is needed to provide the game you asked for. Ads that use cookies rely on your consent where the law requires it. Cookie-free counting of page views and anonymous game events relies on our legitimate interest in knowing how many people use the site.
 - **California (CCPA).** We do not sell personal information. When ads are on, Google's ad cookies may count as "sharing" for cross-context behavioural advertising under California law; you can opt out using the links in the advertising section above or by turning on a Global Privacy Control signal in your browser.
 - **India (DPDP Act).** You may ask us for a summary of personal data we process, ask for correction or erasure, and raise a grievance with us at the email below. If you are not satisfied with our answer, you may complain to the Data Protection Board of India.
 - **Complaints.** You can also complain to your local data-protection authority.

@@ -29,10 +29,10 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"WebSite","name":"PaneSlide","url":"https://paneslide.github.io/","inLanguage":"en","publisher":{"@type":"Organization","name":"PaneSlide","url":"https://paneslide.github.io/","logo":{"@type":"ImageObject","url":"https://paneslide.github.io/icons/icon-512.png","width":512,"height":512}}},{"@context":"https://schema.org","@type":"VideoGame","name":"PaneSlide","url":"https://paneslide.github.io/","description":"A free colour-glass sliding puzzle for the web browser. Slide glass panes so the window matches the picture; where glass overlaps, colours mix. A new daily puzzle plus endless levels.","genre":["Puzzle"],"gamePlatform":"Web browser","applicationCategory":"Game","operatingSystem":"Any","playMode":"SinglePlayer","inLanguage":"en","isAccessibleForFree":true,"image":"https://paneslide.github.io/img/og.png","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"PaneSlide","url":"https://paneslide.github.io/","logo":{"@type":"ImageObject","url":"https://paneslide.github.io/icons/icon-512.png","width":512,"height":512}}}]</script>
-<link rel="stylesheet" href="css/site.css?v=9">
+<link rel="stylesheet" href="css/site.css?v=10">
 <!--/site-head-->
 <link rel="preload" href="fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=9">
+<link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body>
 <div class="scene" id="scene" aria-hidden="true">
@@ -54,8 +54,17 @@
 
 <main>
  <section id="homeView" class="home" hidden>
+  <div class="home-hero">
   <div class="logo-big" aria-hidden="true"><i class="lg c"></i><i class="lg m"></i><i class="lg y"></i><i class="shine"></i></div>
   <h1 class="title">Pane<span>Slide</span></h1>
+  <p class="home-tag">Slide the glass. Mix the colours. Match the picture.</p>
+  <ul class="home-feats">
+    <li><i class="ico pad" aria-hidden="true"></i><span><b>A new daily puzzle</b> for everyone, every day</span></li>
+    <li><i class="ico flag" aria-hidden="true"></i><span><b>Endless levels</b> with nine kinds of special glass</span></li>
+    <li><i class="ico spark" aria-hidden="true"></i><span><b>Free</b>, no sign-up; progress stays on this device</span></li>
+  </ul>
+  </div>
+  <div class="home-actions">
   <button class="cbtn big green" id="btnPlay"><span class="lbl">PLAY</span><small id="playLv">Level 1</small></button>
   <button class="cbtn big blue" id="btnDaily"><span class="cal" aria-hidden="true"><i id="calMon">OCT</i><b id="calDay">27</b></span><span class="lbl">DAILY</span><span class="dstat" id="dailyStat"></span></button>
   <div class="home-row">
@@ -68,6 +77,7 @@
     <button class="cbtn meta purple" id="btnHouse" aria-label="Glass House"><svg viewBox="0 0 24 24" class="win"><circle cx="12" cy="12" r="9.5" fill="#FFD84A"/><path d="M12 12V2.5A9.5 9.5 0 0 1 21 9Z" fill="#3CC8F0"/><path d="M12 12l9 -3A9.5 9.5 0 0 1 17.6 19.7Z" fill="#F0509A"/><path d="M12 12l5.6 7.7A9.5 9.5 0 0 1 6.4 19.7Z" fill="#7ED957"/><path d="M12 12 6.4 19.7A9.5 9.5 0 0 1 3 9Z" fill="#A88BFF"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#2A1B4D" stroke-width="1.6"/><path d="M12 12V2.5M12 12l9-3M12 12l5.6 7.7M12 12l-5.6 7.7M12 12 3 9" stroke="#2A1B4D" stroke-width="1.4"/></svg><span class="ml">House</span></button>
     <button class="cbtn meta gold" id="btnShop" aria-label="Shop"><span class="me">🛍️</span><span class="ml">Shop</span></button>
     <button class="cbtn meta pink" id="btnGift" aria-label="Daily gift"><span class="me">🎁</span><span class="ml">Gift</span><i class="dot" id="giftDot" hidden></i></button>
+  </div>
   </div>
  </section>
 
@@ -98,6 +108,20 @@
     <button class="cbtn round gold hintb" id="btnHint" aria-label="Use a hint" hidden><svg viewBox="0 0 24 24" class="fill"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Zm-3 17h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 20.5V19Z"/></svg><em id="hintCount">3</em></button>
     <button class="cbtn round white" id="btnSkip" aria-label="Skip tutorial" hidden><svg viewBox="0 0 24 24"><path d="M5 5l8 7-8 7M14 5l5 7-5 7"/></svg></button>
   </div>
+  <aside class="keys" aria-label="Keyboard and mouse controls">
+    <h2>Controls</h2>
+    <dl>
+      <dt><kbd>Tab</kbd> <kbd>1</kbd>–<kbd>9</kbd></dt><dd>pick a pane</dd>
+      <dt><kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd></dt><dd>slide it</dd>
+      <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>slide it too</dd>
+      <dt><kbd>Enter</kbd></dt><dd>next pane</dd>
+      <dt><kbd>Z</kbd> or <kbd>Ctrl</kbd> <kbd>Z</kbd></dt><dd>undo</dd>
+      <dt><kbd>H</kbd></dt><dd>hint</dd>
+      <dt><kbd>M</kbd></dt><dd>music on / off</dd>
+      <dt><kbd>Esc</kbd></dt><dd>close a window</dd>
+    </dl>
+    <p>Or drag a pane with the mouse.</p>
+  </aside>
   <button id="btnToMap" hidden></button>
  </div>
 </main>
@@ -249,9 +273,9 @@
   <div class="gift-next" id="giftNext" hidden></div>
 </dialog>
 
-<!--site-js--><script src="site.config.js?v=9"></script>
-<script src="js/site.js?v=9" defer></script><!--/site-js-->
-<script src="js/engine.js?v=9"></script>
-<script src="js/game.js?v=9"></script>
+<!--site-js--><script src="site.config.js?v=10"></script>
+<script src="js/site.js?v=10" defer></script><!--/site-js-->
+<script src="js/engine.js?v=10"></script>
+<script src="js/game.js?v=10"></script>
 </body>
 </html>

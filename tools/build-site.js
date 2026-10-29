@@ -8,7 +8,7 @@ const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(ROOT, "
 const CFG = ctx.window.PANESLIDE_CONFIG, URL0 = CFG.SITE_URL.replace(/\/$/, "");
 const FIG = require("./site/figures.js");
 const SHOTS = fs.existsSync(path.join(ROOT, "img/guides/shots.json")) ? JSON.parse(fs.readFileSync(path.join(ROOT, "img/guides/shots.json"), "utf8")) : {};
-const V = "9"; // asset version for css/js links
+const V = "10"; // asset version for css/js links
 const TODAY = process.env.BUILD_DATE || "2026-10-29";
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const obf = s => s.split("").map(ch => "&#" + ch.charCodeAt(0) + ";").join(""); // light scraper protection, still a normal link
@@ -128,6 +128,7 @@ function addMap(url, pri) { sitemap.push([url, pri]); }
 const GUIDE_DIR = path.join(ROOT, "content/guides");
 const guides = fs.readdirSync(GUIDE_DIR).filter(f => f.endsWith(".md")).sort().map(f => { const d = readDoc(path.join(GUIDE_DIR, f)); return Object.assign({ slug: f.replace(/^\d+-/, "").replace(/\.md$/, ""), file: f }, d); });
 const report = [];
+const groups = [["Start here", "start"], ["Strategy", "strategy"], ["Every kind of glass", "mechanic"], ["Chapter by chapter", "chapters"], ["Colour and light", "colour"], ["Play anywhere", "device"], ["Puzzle world", "puzzles"], ["Puzzles and you", "life"]];
 guides.forEach((g, gi) => {
   const r = md(g.body, { faq: g.meta.faq === "yes" }), url = `/guides/${g.slug}/`, wc = words(r.html);
   report.push([g.slug, wc, g.meta.title]);
@@ -137,6 +138,7 @@ guides.forEach((g, gi) => {
   if (r.faq.length) ld.push({ "@context": "https://schema.org", "@type": "FAQPage", mainEntity: r.faq.map(q => ({ "@type": "Question", name: q[0], acceptedAnswer: { "@type": "Answer", text: q[1].replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\*\*?/g, "") } })) });
   const toc = r.toc.length >= 3 ? `<nav class="s-toc" aria-label="On this page"><b>On this page</b><ol>${r.toc.map(t => `<li><a href="#${t[0]}">${inline(t[1])}</a></li>`).join("")}</ol></nav>` : "";
   const body = `<div class="s-hero"><p class="s-crumbs"><a href="/">Home</a> › <a href="/guides/">Guides</a></p><h1>${esc(g.meta.h1 || g.meta.title)}</h1><p>${esc(g.meta.desc)}</p></div>
+<div class="s-layout">
 <article class="s-card s-prose" aria-labelledby="t">
 <p class="s-meta" id="t">${esc(g.meta.kicker || "Guide")} · ${Math.max(1, Math.round(wc / 220))} min read · Updated ${fmtDate(g.meta.updated || g.meta.date || TODAY)}</p>
 ${toc}
@@ -144,13 +146,17 @@ ${r.html}
 <div class="s-cta"><a class="s-btn" href="${g.meta.cta || "/"}">▶ ${esc(g.meta.ctaText || "Play PaneSlide")}</a><a class="s-btn white" href="/guides/">All guides</a></div>
 ${related.length ? `<section class="s-related" aria-label="Related guides"><h2>Keep reading</h2><div class="s-grid">${related.map(cardLink).join("")}</div></section>` : ""}
 </article>
+<aside class="s-side" aria-label="Guide navigation">
+${r.toc.length >= 3 ? `<nav class="s-sidebox" aria-label="Sections of this guide"><b>On this page</b><ol>${r.toc.map(t => `<li><a href="#${t[0]}">${inline(t[1])}</a></li>`).join("")}</ol></nav>` : ""}
+<nav class="s-sidebox" aria-label="More guides in this section"><b>${esc((groups.find(x => x[1] === (g.meta.group || "start")) || groups[0])[0])}</b><ul>${guides.filter(x => (x.meta.group || "start") === (g.meta.group || "start")).map(x => `<li><a href="/guides/${x.slug}/"${x === g ? ' aria-current="page"' : ""}>${esc(x.meta.h1 || x.meta.title)}</a></li>`).join("")}</ul><a class="s-sideall" href="/guides/">All guides →</a></nav>
+</aside>
+</div>
 ${adSlot("guide")}`;
   write(`guides/${g.slug}/index.html`, page({ url, title: `${g.meta.title} · PaneSlide`, ogTitle: g.meta.h1 || g.meta.title, desc: g.meta.desc, body, nav: "/guides/", ogType: "article", ld }));
   addMap(url, "0.7");
 });
 function cardLink(g) { return `<a class="s-cardlink" href="/guides/${g.slug}/"><span class="ic" aria-hidden="true">${g.meta.icon || "📘"}</span><h3>${esc(g.meta.h1 || g.meta.title)}</h3><p>${esc(g.meta.desc)}</p></a>`; }
 function fmtDate(s) { const d = new Date(s + "T12:00:00Z"); return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }); }
-const groups = [["Start here", "start"], ["Strategy", "strategy"], ["Every kind of glass", "mechanic"], ["Puzzles and you", "life"]];
 write("guides/index.html", page({ url: "/guides/", title: "PaneSlide guides: rules, strategy and every kind of glass", desc: "Free guides to PaneSlide: how gliding and sticking work, how glass colours mix, strategy for perfect solves, every special glass, daily habit tips and the history of sliding puzzles.", nav: "/guides/",
   ld: [{ "@context": "https://schema.org", "@type": "CollectionPage", name: "PaneSlide guides", url: URL0 + "/guides/", hasPart: guides.map(g => ({ "@type": "Article", headline: g.meta.h1 || g.meta.title, url: URL0 + `/guides/${g.slug}/` })) }],
   body: `<div class="s-hero"><span class="s-kicker">Guides</span><h1>Get better at PaneSlide</h1><p>${guides.length} short, original guides written by the PaneSlide team: the rules, the strategy, and every special kind of glass, with diagrams drawn from the real game.</p></div>
@@ -162,7 +168,7 @@ const PAGE_DIR = path.join(ROOT, "content/pages");
 fs.readdirSync(PAGE_DIR).filter(f => f.endsWith(".md")).forEach(f => {
   const d = readDoc(path.join(PAGE_DIR, f)), slug = f.replace(/\.md$/, ""), url = `/${slug}/`;
   let body = d.body.replace(/\{\{ADS_STATUS\}\}/g, CFG.ADS_ENABLED ? "PaneSlide **shows ads** from Google AdSense." : "**Right now PaneSlide shows no ads.** We plan to apply to Google AdSense; this section explains what will happen when ads are switched on, and we will update the date at the top when they are.")
-    .replace(/\{\{ANALYTICS_STATUS\}\}/g, CFG.ANALYTICS_ENABLED ? "We use **GoatCounter**, a privacy-friendly analytics service, to count page views." : "**Right now PaneSlide uses no analytics at all.** If we switch it on, we will use **GoatCounter**, a privacy-friendly service, only to count page views.")
+    .replace(/\{\{ANALYTICS_STATUS\}\}/g, CFG.ANALYTICS_ENABLED ? "We use **GoatCounter**, a privacy-friendly analytics service that uses no cookies, to count page views and a short list of anonymous game events (listed below). It never receives your name, email or game progress." : "**Right now PaneSlide uses no analytics at all.** If we switch it on, we will use **GoatCounter**, a privacy-friendly service, only to count page views and the anonymous game events listed below.")
     .replace(/\{\{UPDATED\}\}/g, fmtDate(d.meta.updated || TODAY));
   const r = md(body, {});
   const ld = [{ "@context": "https://schema.org", "@type": d.meta.type || "WebPage", name: d.meta.h1, url: URL0 + url, description: d.meta.desc, inLanguage: "en", isPartOf: { "@type": "WebSite", name: "PaneSlide", url: URL0 + "/" } }];

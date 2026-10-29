@@ -242,7 +242,7 @@ dialog::backdrop { background: rgba(20, 8, 50, .62); }
 .ribbon.purple { background: linear-gradient(180deg, #A88BFF, #6A46EA); box-shadow: inset 0 3px 0 rgba(255,255,255,.35), 0 5px 0 #4630A8; } .ribbon.purple::before, .ribbon.purple::after { background: #4630A8; }
 .ribbon.gold { background: linear-gradient(180deg, #FFE16A, #FFAE1A); color: #6B3A00; text-shadow: 0 1px 0 rgba(255,255,255,.5); box-shadow: inset 0 3px 0 rgba(255,255,255,.45), 0 5px 0 #C27400; } .ribbon.gold::before, .ribbon.gold::after { background: #C27400; }
 .ribbon.pink::before, .ribbon.pink::after { background: #A82366; }
-.x { position: absolute !important; right: -14px; top: -14px; width: 44px !important; height: 44px !important; border-radius: 50% !important; z-index: 3; }
+.x { position: absolute !important; right: 8px; top: 8px; width: 40px !important; height: 40px !important; border-radius: 50% !important; z-index: 3; }
 .x svg { width: 20px; height: 20px; stroke-width: 3.4; }
 .btnrow { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; }
 .btnrow .cbtn.big { flex: 1; max-width: 200px; }
@@ -312,12 +312,6 @@ dialog::backdrop { background: rgba(20, 8, 50, .62); }
 .tile b { font-size: 26px; font-weight: 700; line-height: 1.1; }
 .tile.wide { grid-column: span 3; flex-direction: row; justify-content: center; gap: 10px; }
 .tile.wide b { font-size: 20px; }
-.dist { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
-.dist .bar { display: flex; align-items: center; gap: 8px; }
-.dist .bar .lb { width: 74px; display: flex; justify-content: flex-end; align-items: center; gap: 1px; font-size: 14px; color: var(--muted); }
-.dist .bar .lb .st { width: 16px; height: 16px; }
-.dist .bar b { display: inline-block; min-width: 28px; padding: 3px 8px; border-radius: 8px; background: #E6DEFA; text-align: right; font-weight: 700; }
-.dist .bar.me b { background: linear-gradient(180deg, #8BE04E, #3FB02A); color: #fff; }
 .sect { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 14px 0 8px; font-size: 15px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
 .sect .ico { width: 22px; height: 22px; }
 
@@ -527,8 +521,6 @@ body[data-view="home"] #chipStars { display: none; }
 .ach .at { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
 .ach b { font-size: 13px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ach small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#dlgStats { max-height: calc(100dvh - 40px); overflow-y: auto; }
-#dlgStats[open] { overflow: auto; }
 @keyframes giftbob { 50% { transform: translateY(-6px) rotate(-4deg); } }
 .house-row { position: relative; }
 @media (max-width: 400px) {
@@ -547,3 +539,70 @@ body[data-view="home"] #chipStars { display: none; }
 .save-lb { display: block; font-size: 14px; font-weight: 600; margin-top: 10px; color: #5E5285; }
 .save-box { width: 100%; font: 500 12.5px/1.35 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); background: var(--panel2); border: 2px solid var(--pshadow); border-radius: 14px; padding: 8px 10px; resize: none; word-break: break-all; user-select: text; -webkit-user-select: text; }
 .save-msg { min-height: 1.2em; margin: 6px 0 0; font-size: 14px; color: #B3204D; text-align: center; }
+
+/* v10: dialogs never clip their ribbon or close button. The ribbon and ✕ stay on the panel while
+   only the content (.pscroll, wrapped by game.js) scrolls, so the header is always visible. */
+dialog.panel[open] { display: flex; flex-direction: column; max-height: calc(100dvh - 76px); }
+dialog.panel > .pscroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: -6px -20px -22px; padding: 6px 20px 22px; border-radius: 0 0 26px 26px; scrollbar-width: thin; }
+.ribbon { z-index: 2; }
+.tile small { font-size: 11.5px; line-height: 1.15; color: var(--muted); font-weight: 600; letter-spacing: .2px; max-width: 100%; overflow-wrap: anywhere; }
+/* daily distribution: one label column, one track per row, counts in their own column */
+.dist { margin-top: 12px; padding: 10px 12px 12px; border-radius: 16px; background: #fff; box-shadow: 0 4px 0 var(--pshadow); text-align: left; }
+.dist .dhead { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); font-weight: 600; margin: 0 0 6px; }
+.dist .drow { display: grid; grid-template-columns: 52px 1fr 30px; align-items: center; gap: 8px; height: 26px; }
+.dist .dl { display: flex; align-items: center; justify-content: flex-end; gap: 3px; font-size: 14px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.dist .dl .ico { width: 15px; height: 15px; }
+.dist .dt { position: relative; height: 16px; border-radius: 8px; background: #EEE8FB; overflow: hidden; }
+.dist .df { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 8px; background: linear-gradient(180deg, #A88BFF, #6A46EA); }
+.dist .drow.me .df { background: linear-gradient(180deg, #8BE04E, #3FB02A); }
+.dist .drow.me .dl, .dist .drow.me .dn { color: #2E8A1F; }
+.dist .dn { text-align: right; font-size: 15px; font-weight: 700; }
+
+/* ---------- v10: tablet and desktop layouts (phones under 700px wide are unchanged) ---------- */
+.home-hero, .home-actions { display: contents; }
+.home-tag, .home-feats, .keys { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .board .pane { cursor: grab; }
+  .board .pane.locked { cursor: not-allowed; }
+  body.grabbing, body.grabbing .board .pane { cursor: grabbing; }
+  .cbtn:hover { filter: brightness(1.06); }
+}
+@media (min-width: 700px) {
+  main { max-width: 680px; }
+  .hud { max-width: 720px; }
+  .meter { min-width: 300px; }
+}
+@media (min-width: 960px) and (min-height: 560px) {
+  .hud { max-width: 1180px; padding-left: 28px; padding-right: 28px; }
+  main { max-width: 1180px; padding: 0 28px 32px; }
+  /* home: hero on the left, a glass card of actions on the right */
+  .home { flex-direction: row; align-items: center; justify-content: center; gap: clamp(48px, 7vw, 120px); padding: 24px 0 90px; }
+  .home-hero { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; max-width: 480px; }
+  .home-hero .logo-big { margin: 14px 0 18px 16px; }
+  .home-hero .title { font-size: clamp(64px, 6vw, 84px); margin: 0; text-align: left; }
+  .home-tag { display: block; margin: 0; color: #fff; font-size: 22px; font-weight: 600; line-height: 1.35; text-shadow: 0 2px 8px rgba(20,0,60,.35); }
+  .home-feats { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 14px 0 0; padding: 0; color: #fff; font-size: 17px; line-height: 1.35; }
+  .home-feats li { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-radius: 18px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); }
+  .home-feats .ico { width: 28px; height: 28px; flex: none; }
+  .home-actions { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 40px 40px 34px; border-radius: 34px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.22); box-shadow: 0 24px 60px rgba(20,0,60,.35); }
+  .home .cbtn.big { width: 340px; min-height: 76px; font-size: 32px; }
+  .home-row .cbtn.round { width: 66px; height: 66px; }
+  .home-meta { margin-top: 4px; }
+  /* play: target and moves on the left, board in the middle, controls on the right */
+  .play { display: grid; grid-template-columns: minmax(220px, 270px) auto minmax(220px, 270px); grid-template-rows: auto auto 1fr; grid-template-areas: "goal stage keys" "meter stage keys" "actions stage keys"; column-gap: clamp(28px, 4vw, 60px); row-gap: 18px; justify-content: center; align-items: start; padding-top: 18px; }
+  .play > .goal { grid-area: goal; flex-direction: column; justify-self: stretch; gap: 12px; padding: 16px; margin-top: 34px; }
+  .play > .goal::after { content: "Match this picture"; font-size: 15px; font-weight: 600; color: var(--muted); }
+  .play > .stage-wrap { grid-area: stage; }
+  .play > .meter { grid-area: meter; justify-self: stretch; min-width: 0; }
+  .play > .actions { grid-area: actions; flex-wrap: wrap; gap: 12px; }
+  .keys { display: block; grid-area: keys; margin-top: 34px; padding: 16px 18px; border-radius: 20px; background: rgba(255,255,255,.94); color: var(--ink); box-shadow: 0 5px 0 var(--pshadow), 0 12px 26px rgba(20,0,60,.25); }
+  .keys h2 { margin: 0 0 10px; font-size: 18px; }
+  .keys dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; margin: 0; align-items: center; font-size: 14px; }
+  .keys dt { white-space: nowrap; display: flex; gap: 3px; align-items: center; } .keys dd { margin: 0; color: var(--muted); white-space: nowrap; }
+  .keys kbd { display: inline-block; min-width: 22px; padding: 1px 4px; border-radius: 6px; background: #F1ECFD; border: 1px solid #D9CCF7; border-bottom-width: 3px; font: 600 12.5px/1.4 "Fredoka", system-ui, sans-serif; text-align: center; color: var(--ink); }
+  .keys p { margin: 12px 0 0; font-size: 13.5px; color: var(--muted); }
+  body[data-view="tutorial"] .keys { visibility: hidden; }
+  /* map: a wider path column */
+  .map { max-width: 720px; margin: 0 auto; }
+}
+@media (min-width: 960px) and (max-height: 700px) and (min-height: 560px) { .home-hero .logo-big { transform: none; } }

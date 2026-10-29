@@ -6,18 +6,18 @@
    - old caches are deleted on activate;
    - pages (HTML) are network-first, so an online visit always gets the latest page;
    - versioned files (?v=) and fonts/icons are cache-first, because their URL changes when they change. */
-const VERSION = "ps-5189a03108";
+const VERSION = "ps-4467d20d05";
 const PRECACHE = [
  "/",
  "/index.html",
- "/css/style.css?v=9",
- "/css/site.css?v=9",
- "/js/engine.js?v=9",
- "/js/game.js?v=9",
- "/js/levels.js?v=9",
- "/js/site.js?v=9",
- "/js/archive.js?v=9",
- "/site.config.js?v=9",
+ "/css/style.css?v=10",
+ "/css/site.css?v=10",
+ "/js/engine.js?v=10",
+ "/js/game.js?v=10",
+ "/js/levels.js?v=10",
+ "/js/site.js?v=10",
+ "/js/archive.js?v=10",
+ "/site.config.js?v=10",
  "/fonts/fredoka-latin.woff2",
  "/favicon.svg",
  "/manifest.webmanifest",

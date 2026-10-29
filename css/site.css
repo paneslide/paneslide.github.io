@@ -105,3 +105,27 @@ body:not([data-view="home"]) .home-site { display: none; }
 .home-site .s-foot p { color: #F1E9FF; }
 @media (max-width: 420px) { body.site { font-size: 17px; } .s-nav a { font-size: 14.5px; padding: 6px 10px; } .s-brand { font-size: 22px; } .s-prose h2 { font-size: 23px; } }
 @media (prefers-reduced-motion: reduce) { .s-cardlink:hover { transform: none; } }
+
+/* v10: desktop guide layout. Phones and tablets keep the single column (the side nav is hidden). */
+.s-side { display: none; }
+@media (min-width: 1100px) {
+  .s-head, .s-main, .s-foot { max-width: 1180px; }
+  .s-layout { display: grid; grid-template-columns: minmax(0, 780px) 290px; gap: 28px; justify-content: center; align-items: start; }
+  .s-layout > .s-prose { max-width: none; margin: 0; font-size: 18px; }
+  .s-layout > .s-prose > p, .s-layout > .s-prose > ul, .s-layout > .s-prose > ol, .s-layout > .s-prose > h2, .s-layout > .s-prose > h3 { max-width: 70ch; }
+  .s-layout .s-prose > .s-toc { display: none; }
+  .s-side { display: block; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+  .s-sidebox { background: var(--panel); border-radius: 20px; padding: 16px 18px; margin: 0 0 16px; box-shadow: 0 5px 0 var(--pshadow), 0 12px 26px rgba(43,20,102,.16); font-size: 15px; line-height: 1.4; }
+  .s-sidebox b { display: block; font: 600 17px/1.2 "Fredoka", system-ui, sans-serif; margin: 0 0 8px; }
+  .s-sidebox ol, .s-sidebox ul { margin: 0; padding-left: 20px; }
+  .s-sidebox ul { list-style: none; padding: 0; }
+  .s-sidebox li { margin: 6px 0; }
+  .s-sidebox a { color: var(--link); text-decoration: none; }
+  .s-sidebox a:hover { text-decoration: underline; }
+  .s-sidebox a[aria-current="page"] { color: var(--ink); font-weight: 700; }
+  .s-sideall { display: inline-block; margin-top: 8px; font-weight: 600; }
+  .s-hero h1 { max-width: 900px; margin-left: auto; margin-right: auto; }
+  .s-main > .s-card:not(.s-prose) { max-width: 1100px; }
+  .s-main > .s-prose { max-width: 820px; }
+  .s-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+}
