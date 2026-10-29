@@ -165,17 +165,85 @@ async function run(browser, tag, ctxOpts, full, darkReader) {
     await page.mouse.click(30, 400); await page.waitForTimeout(600);
     console.log(tag, "after tap, mark:", await page.evaluate(() => PS.markShown), "seen:", await page.evaluate(() => JSON.parse(localStorage.getItem("ps2:prefs")).marks.join(",")));
   }
+  if (full) await v8shots(page, go, tag);
   await ctx.close();
+}
+// v8: each new kind of glass is taught with its own tip; boss, Glass House, shop, daily gift, map teaser.
+const TEACH = { 12: "locked", 18: "duo", 25: "pillar", 33: "gem", 42: "ice", 52: "sand", 64: "oneway", 78: "frost", 95: "mystery" };
+async function waitMark(page, want) {
+  let k = await page.evaluate(() => PS.markShown), guard = 0;
+  while (k !== want && guard++ < 14) { if (k) await page.mouse.click(8, 300); await page.waitForTimeout(800); k = await page.evaluate(() => PS.markShown); }
+  return k;
+}
+function seedProgress(unlocked, extra) {
+  return `(() => { const p = JSON.parse(localStorage.getItem("ps2:levels") || "{}"); p.unlocked = ${unlocked}; p.stars = p.stars || {}; for (let i = 1; i < ${unlocked}; i++) p.stars[i] = p.stars[i] || [3, 2, 3, 3, 1][i % 5]; p.boss = []; for (let b = 20; b < ${unlocked}; b += 20) p.boss.push(b); Object.assign(p, ${JSON.stringify(extra || {})}); localStorage.setItem("ps2:levels", JSON.stringify(p)); })()`;
+}
+async function clearMarks(page) { for (let g = 0; g < 12 && await page.evaluate(() => PS.markShown); g++) { await page.mouse.click(8, 300); await page.waitForTimeout(700); } }
+async function v8shots(page, go, tag) {
+  for (const L of Object.keys(TEACH)) {
+    const want = TEACH[L];
+    await go("&level=" + L + "&marks=1"); await page.waitForTimeout(900);
+    const info = await page.evaluate(() => ({ teach: PS.puzzle.teach, mechs: PS.puzzle.mechs }));
+    const k = await waitMark(page, want);
+    await page.screenshot({ path: out + "teach-" + L + "-" + want + ".png" });
+    console.log(tag, "teach L" + L, JSON.stringify(info), "tip:", k);
+    if (info.teach !== want) errors.push(tag + " level " + L + " should teach " + want + " but teaches " + info.teach);
+    const seen = await page.evaluate(w => (JSON.parse(localStorage.getItem("ps2:prefs")).marks || []).indexOf(w) >= 0, want);
+    if (k !== want && !seen) errors.push(tag + " " + want + " tip did not show on level " + L);
+    await clearMarks(page);
+    await solve(page); await page.waitForSelector("#dlgLevel[open], #dlgMile[open]", { timeout: 5000 });
+    const gems = await page.evaluate(() => PS.puzzle.gems ? PS.state.got.length + "/" + PS.puzzle.gems.length : "-");
+    if (want === "gem") { console.log(tag, "gems collected on the best route:", gems); if (!/^(\d+)\/\1$/.test(gems)) errors.push(tag + " gems not all collected on the best route: " + gems); }
+  }
+  // a chapter boss (golden frame), then its "window restored" card
+  await go("&level=40&marks=1"); await page.waitForTimeout(900);
+  const bk = await waitMark(page, "boss");
+  await page.screenshot({ path: out + "boss-level40.png" });
+  console.log(tag, "boss L40:", await page.evaluate(() => PS.puzzle.boss), "tip:", bk);
+  await clearMarks(page);
+  await solve(page); await page.waitForSelector("#dlgMile[open]", { timeout: 5000 }); await page.waitForTimeout(1600);
+  await page.screenshot({ path: out + "boss-window-restored.png" });
+  // a player with 47 levels unlocked, 2 bosses beaten and 150 shards
+  await page.evaluate(seedProgress(47, { shards: 150, v: 8 }));
+  await go("&mode=levels"); await page.waitForTimeout(700);
+  await page.screenshot({ path: out + "map-teaser" + (tag === "light" ? "" : "-" + tag) + ".png" });
+  console.log(tag, "map teaser:", await page.evaluate(() => document.getElementById("mapTeaser").textContent));
+  await go(""); await page.screenshot({ path: out + "home-v8.png" });
+  await page.evaluate(() => PS.openHouse()); await page.waitForTimeout(700); await page.screenshot({ path: out + "glass-house.png" }); await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+  await page.evaluate(() => PS.openShop()); await page.waitForTimeout(700); await page.screenshot({ path: out + "shop.png" });
+  const s0 = await page.evaluate(() => PS.progress.shards);
+  await page.click("[data-buy='skin:mint']"); await page.waitForTimeout(400);
+  const s1 = await page.evaluate(() => ({ shards: PS.progress.shards, skin: PS.progress.skin }));
+  console.log(tag, "shop: bought Mint board", s0, "->", JSON.stringify(s1));
+  if (s1.shards !== s0 - 80 || s1.skin !== "mint") errors.push(tag + " shop purchase failed");
+  await page.screenshot({ path: out + "shop-after-buy.png" }); await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+  await go("&level=47"); await page.waitForTimeout(600); await page.screenshot({ path: out + "skin-mint-level47.png" });
+  await go(""); await page.evaluate(() => PS.openGift()); await page.waitForTimeout(700); await page.screenshot({ path: out + "daily-gift.png" });
+  const g0 = await page.evaluate(() => PS.progress.shards), a0 = await page.evaluate(() => PS.progress.ach.length);
+  await page.click("#btnClaim"); await page.waitForTimeout(900);
+  const g1 = await page.evaluate(() => ({ shards: PS.progress.shards, login: PS.progress.login, ach: PS.progress.ach.length }));
+  await page.screenshot({ path: out + "daily-gift-claimed.png" });
+  console.log(tag, "gift:", g0, "->", JSON.stringify(g1));
+  if (g1.shards !== g0 + 5 + 10 * (g1.ach - a0)) errors.push(tag + " daily gift did not pay 5 shards");
+  await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+  await page.click("#btnStats"); await page.waitForTimeout(800); await page.screenshot({ path: out + "stats-badges.png" }); await page.keyboard.press("Escape");
+  // the new music moods must render cleanly too
+  for (const m of ["rain", "box"]) {
+    await page.evaluate(k => { PS.progress.mood = k; }, m);
+    const mc = await page.evaluate(() => PS.musicCheck());
+    console.log(tag, "music mood", m, JSON.stringify(mc));
+    if (!(mc.peakDb < -1) || mc.seamPeakOrJump > 0.891 || mc.maxJump > 0.25 || !(mc.clickRatio < 3.5)) errors.push(tag + " music mood " + m + " failed the render check " + JSON.stringify(mc));
+  }
 }
 async function overflow(page, where) { // any text sticking out of its button/chip/tile, or off screen
   const bad = await page.evaluate(() => {
     const vis = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none"; };
     const root = document.querySelector("dialog[open]") || document.querySelector("main, body");
-    const boxes = [...root.querySelectorAll(".cbtn, .stat, .tile, .ribbon, .tgl, .vol, .gift, .rules > div, .mixes span, .chap, .hd figcaption, .hgoal, .cm-bub, .mapbar, .badge, #status")].filter(vis);
+    const boxes = [...root.querySelectorAll(".cbtn, .stat, .tile, .ribbon, .tgl, .vol, .gift, .rules > div, .mixes span, .chap, .hd figcaption, .hgoal, .cm-bub, .mapbar, .badge, #status, .teaser, .shop-it, .gd, .ach, .bal, .hw, .gemct, .home-meta")].filter(vis);
     const out = [];
     boxes.forEach(b => {
       const r = b.getBoundingClientRect();
-      if (r.left < -1 || r.right > innerWidth + 1) out.push("off-screen: " + (b.id || b.className) + " " + Math.round(r.left) + ".." + Math.round(r.right));
+      if ((r.left < -1 || r.right > innerWidth + 1) && !(b.classList.contains("hw") && b.parentNode.scrollWidth > b.parentNode.clientWidth)) out.push("off-screen: " + (b.id || b.className) + " " + Math.round(r.left) + ".." + Math.round(r.right));
       if (b.scrollWidth > b.clientWidth + 2 && getComputedStyle(b).overflowX !== "visible") out.push("clipped: " + (b.id || b.className) + " " + b.scrollWidth + ">" + b.clientWidth);
       b.querySelectorAll("*").forEach(c => { if (!vis(c) || c.closest("svg") && c.tagName !== "svg" || c.id === "hintCount") return; /* hint count is a deliberate corner badge */ const q = c.getBoundingClientRect(); if (q.left < r.left - 1 || q.right > r.right + 1) out.push("sticks out: " + (c.className || c.tagName) + " in " + (b.id || b.className)); });
       const l = b.querySelector(".lbl"); if (l && l.scrollWidth > l.clientWidth + 1) out.push("label cut: " + (b.id || b.className) + " '" + l.textContent + "'");
@@ -213,6 +281,19 @@ async function sizes(browser, w, h, noFont) {
   await go("&mode=daily"); await solve(page); await page.waitForSelector("#dlgEnd[open]", { timeout: 5000 }); await page.waitForTimeout(1400);
   await overflow(page, tag + " daily-end card");
   await go("&level=12&marks=1"); await page.waitForTimeout(1300); await overflow(page, tag + " coach mark");
+  await go("&level=33"); await overflow(page, tag + " gem level");
+  await page.evaluate(seedProgress(87, { shards: 200, v: 8 }));
+  await go(""); await overflow(page, tag + " home v8");
+  await go("&mode=levels"); await overflow(page, tag + " map teaser");
+  if (w === 360 && !noFont) await page.screenshot({ path: out + "map-teaser-360.png" });
+  for (const [fn, nm] of [["openHouse", "glass house"], ["openShop", "shop"], ["openGift", "daily gift"]]) {
+    await go(""); await page.evaluate(f => PS[f](), fn); await page.waitForTimeout(700); await overflow(page, tag + " " + nm);
+    const fit = await page.evaluate(() => { const d = document.querySelector("dialog[open]").getBoundingClientRect(); return d.top >= -1 && d.bottom <= innerHeight + 1; });
+    if (!fit) { const sc = await page.evaluate(() => { const d = document.querySelector("dialog[open]"); return d.scrollHeight > d.clientHeight; }); if (!sc) errors.push(tag + " " + nm + " dialog taller than the screen"); }
+    if (w === 360 && !noFont) await page.screenshot({ path: out + fn.replace("open", "").toLowerCase() + "-360.png" });
+    await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+  }
+  await page.click("#btnStats"); await page.waitForTimeout(700); await overflow(page, tag + " stats v8"); await page.keyboard.press("Escape");
   await ctx.close();
 }
 (async () => {

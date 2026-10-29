@@ -42,6 +42,66 @@
   var HINT_MAX = 5;
   function parOf(p) { return E.parOf(p); }
 
+  // ---------- v8 rewards: glass shards, Glass House, daily gift, badges ----------
+  // Shards are earned by playing (new stars, first perfect solve, gems, chapter bosses, the daily
+  // puzzle, the daily gift, badges) and spent in the shop. Everything stays in localStorage.
+  prog.gems = prog.gems || {}; prog.perfSet = prog.perfSet || {}; prog.boss = prog.boss || []; prog.ach = prog.ach || [];
+  prog.login = prog.login || { last: null, day: 0, streak: 0, best: 0 }; prog.own = prog.own || ["classic", "cafe"];
+  prog.skin = prog.skin || "classic"; prog.mood = prog.mood || "cafe"; prog.gemTotal = prog.gemTotal || 0; prog.dailyShards = prog.dailyShards || {};
+  if (!(prog.v >= 8)) { // existing players: 2 shards for every star they already have, 15 for each chapter boss behind them
+    var st0 = 0; for (var sk in prog.stars) st0 += prog.stars[sk];
+    for (var bN = 20; bN < prog.unlocked; bN += 20) if (prog.boss.indexOf(bN) < 0) prog.boss.push(bN);
+    prog.shards = (prog.shards || 0) + 2 * st0 + 15 * prog.boss.length; prog.v = 8;
+    save("ps2:levels", prog);
+  }
+  var SHARD = "<i class='ico shard'></i>";
+  var GIFT = [5, 5, 10, 10, 15, 15, 30];
+  var MECH_INFO = {
+    locked: ["🔒", "Locked glass", "Locked glass never moves. Use it as a stopper!"],
+    duo: ["🎨", "Two colours", "Only two colours in this picture."],
+    pillar: ["🧱", "Stone pillars", "Stone pillars block glass, just like the edge."],
+    gem: ["💎", "Gems", "Slide glass over gems to collect them. Bonus shards!"],
+    ice: ["❄️", "Ice", "Glass never sticks on ice. It keeps gliding."],
+    sand: ["🏖️", "Sand", "Sand stops glass as soon as it slides onto it."],
+    oneway: ["➡️", "One-way glass", "This glass only glides the way its arrow points."],
+    frost: ["🌫️", "Frosted glass", "Frosted glass hides its colour until you move it."],
+    mystery: ["❓", "Mystery picture", "The picture shows itself bit by bit as you swipe."]
+  };
+  var SKINS = {
+    classic: { name: "Classic", price: 0, fr: ["#F6F2FF", "#D6C8F5"], well: "#E1D8F1" },
+    oak: { name: "Oak", price: 60, fr: ["#F6DEB8", "#C8935A"], well: "#EBDCC6" },
+    mint: { name: "Mint", price: 80, fr: ["#E8FFF5", "#9FE0C2"], well: "#D8F0E4" },
+    rose: { name: "Rose", price: 80, fr: ["#FFF1F6", "#F2B3CB"], well: "#F4DCE5" },
+    midnight: { name: "Midnight", price: 120, fr: ["#5A4E92", "#2A2253"], well: "#3E3670" }
+  };
+  var MOODS = { cafe: { name: "Café", price: 0, ico: "☕" }, rain: { name: "Rain", price: 60, ico: "🌧️" }, box: { name: "Music box", price: 90, ico: "🎶" } };
+  var ACH = [
+    ["first", "🪟", "First window", "Restore a window", function () { return prog.boss.length >= 1; }],
+    ["boss3", "👑", "Boss breaker", "Beat 3 chapter bosses", function () { return prog.boss.length >= 3; }],
+    ["perf10", "✨", "Perfectionist", "10 perfect levels", function () { return Object.keys(prog.perfSet).length >= 10; }],
+    ["run5", "🔥", "On a roll", "5 perfect in a row", function () { return (prog.bestPerf || 0) >= 5; }],
+    ["gem25", "💎", "Gem hunter", "Collect 25 gems", function () { return prog.gemTotal >= 25; }],
+    ["gem100", "👜", "Treasure keeper", "Collect 100 gems", function () { return prog.gemTotal >= 100; }],
+    ["star100", "⭐", "Star collector", "100 stars", function () { return totalStars() >= 100; }],
+    ["star300", "🌟", "Star gazer", "300 stars", function () { return totalStars() >= 300; }],
+    ["learn5", "🧪", "Explorer", "Meet 5 new kinds of glass", function () { return E.MECHS.filter(function (m) { return prog.unlocked > m.at; }).length >= 5; }],
+    ["learn9", "🔮", "Glass expert", "Meet all 9 kinds of glass", function () { return E.MECHS.every(function (m) { return prog.unlocked > m.at; }); }],
+    ["daily5", "📅", "Daily solver", "Solve 5 daily puzzles", function () { return stats.played >= 5; }],
+    ["gift7", "🎁", "Week of glass", "Open the gift 7 days running", function () { return (prog.login.best || 0) >= 7; }]
+  ];
+  function checkAch() { // returns the badges earned just now (+10 shards each)
+    var got = [];
+    ACH.forEach(function (a) { if (prog.ach.indexOf(a[0]) < 0 && a[4]()) { prog.ach.push(a[0]); prog.shards += 10; got.push(a); } });
+    if (got.length) { lvSave(); syncHud(); setTimeout(function () { toast(got[0][1] + " " + got[0][2] + " · +" + 10 * got.length); sfx.medal(); }, 900); }
+    return got;
+  }
+  function syncHud() { var h = $("hudShards"); if (h) h.textContent = prog.shards; var s = $("hudStars"); if (s) s.textContent = totalStars(); var gd = $("giftDot"); if (gd) gd.hidden = !giftState().ready; }
+  function giftState() {
+    var L = prog.login, y = E.addDays(today, -1);
+    if (L.last === today) return { ready: false, day: L.day };
+    return { ready: true, day: L.last === y ? L.day % 7 + 1 : 1, missed: !!L.last && L.last !== y };
+  }
+
   // ---------- chapters, ranks, tips ----------
   // scene: [sky top, sky mid, sky bottom, far hill, near hill, sun glow, banner light, banner dark]
   var CHAPTERS = [
@@ -75,7 +135,7 @@
     $("homeView").hidden = v !== "home"; $("mapView").hidden = v !== "map"; $("playView").hidden = !(v === "play" || v === "tutorial");
     $("btnBack").style.visibility = (v === "home" || v === "tutorial") ? "hidden" : "visible";
     $("lvBadge").style.visibility = v === "home" ? "hidden" : "visible";
-    $("hudStars").textContent = totalStars();
+    syncHud();
     window.scrollTo(0, 0);
   }
   function setBadge(icon, top, num) {
@@ -83,14 +143,15 @@
     b.style.fontSize = String(num).length > 13 ? "15px" : String(num).length > 9 ? "17px" : "";
   }
   var CAL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>';
-  function levelUI(on) { $("btnHint").hidden = !on; $("btnRestart").hidden = !on; $("starLine").hidden = false; $("btnUndo").hidden = !(puz && puz.glide && mode !== "tutorial"); }
+  function levelUI(on) { if (!on) { var gc = $("gemCt"); if (gc) gc.hidden = true; } $("btnHint").hidden = !on; $("btnRestart").hidden = !on; $("starLine").hidden = false; $("btnUndo").hidden = !(puz && puz.glide && mode !== "tutorial"); }
   function startHome() {
     hideCoach(true); clearHint(); mode = "home"; locked = true; applyTheme(null);
     var lv = $("playLv"); lv.textContent = "Level " + prog.unlocked;
     var d = new Date(); $("calMon").textContent = d.toLocaleString("en", { month: "short" }).toUpperCase(); $("calDay").textContent = d.getDate();
     var st = load("ps2:game:" + today, null), ds = $("dailyStat");
     clearMarks(); syncMusicBtn();
-    if (prefs.tutDone) { mark("music", "btnMusic", 700); mark("daily", "btnDaily"); }
+    if (prefs.tutDone) { mark("music", "btnMusic", 700); mark("daily", "btnDaily"); if (giftState().ready) mark("giftday", "btnGift"); if (prog.unlocked > 1) mark("house", "btnHouse"); if (prog.shards >= 15) mark("shop", "btnShop"); }
+    syncHud();
     if (st && st.status === "won") ds.innerHTML = "<span class='done'>✔</span>";
     else if (currentStreak() > 0) ds.innerHTML = "<i class='ico fire'></i>" + currentStreak();
     else ds.innerHTML = "<span class='new'>NEW</span>";
@@ -120,7 +181,7 @@
   }
   function ensureLevels(cb) {
     if (window.PANESLIDE_LEVELS) return cb();
-    var sc = document.createElement("script"); sc.src = "js/levels.js?v=7"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+    var sc = document.createElement("script"); sc.src = "js/levels.js?v=8"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
   }
   function getLevel(N) {
     var D = window.PANESLIDE_LEVELS;
@@ -133,14 +194,17 @@
     ensureLevels(function () {
       hideCoach(true); clearHint();
       mode = "level"; puz = getLevel(N); n = puz.n; GKEY = null; locked = false;
-      state = { pos: puz.start.slice(), moves: 0, hist: [], undo: [], status: "playing", hinted: false };
+      state = { pos: puz.start.slice(), moves: 0, hist: [], undo: [], status: "playing", hinted: false, got: [], thawed: {}, reveal: 0 };
       var ch = chapterOf(N); applyTheme(ch);
       $("btnSkip").hidden = true; $("status").hidden = false; levelUI(true);
-      setBadge(puz.challenge ? "🏆" : puz.breather ? "🌿" : ch.icon, "Level", N);
-      showView("play"); build(); updateHint(); updateStarLine();
+      setBadge(puz.boss ? "👑" : puz.challenge ? "🏆" : puz.breather ? "🌿" : ch.icon, puz.boss ? "Boss" : "Level", N);
+      showView("play"); build(); updateHint(); updateStarLine(); updateGems(false);
       tipShown = null; setRule("");
       clearMarks(); levelMarks(N);
-      if (N % 20 === 1 && N > 1) setTimeout(function () { flashTip(ch.icon + " " + ch.name + "!", 2800); }, 350);
+      var info = puz.teach && MECH_INFO[puz.teach];
+      if (info) setTimeout(function () { flashTip("✨ New: " + info[0] + " " + info[1], 3400); }, 350);
+      else if (puz.boss) setTimeout(function () { flashTip("👑 Chapter boss!", 2800); }, 350);
+      else if (N % 20 === 1 && N > 1) setTimeout(function () { flashTip(ch.icon + " " + ch.name + "!", 2800); }, 350);
     });
   }
   function setRule(t) { var r = $("rule"); r.textContent = t; r.classList.toggle("coaching", !!t); }
@@ -188,7 +252,8 @@
   }
   function offset(p, pos) { if (p.axis === "b") return [(pos % (p.mc + 1)) * STEP, Math.floor(pos / (p.mc + 1)) * STEP]; return p.axis === "h" ? [pos * STEP, p.base * STEP] : [p.base * STEP, pos * STEP]; }
   var LOCK_SVG = '<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>';
-  function arrowSVG(axis) {
+  function arrowSVG(axis, dir) {
+    if (dir && axis !== "b") return '<svg viewBox="0 0 24 24"><path d="' + (axis === "h" ? (dir > 0 ? "M3 12h17M14 6l6 6-6 6" : "M21 12H4M10 6l-6 6 6 6") : (dir > 0 ? "M12 3v17M6 14l6 6 6-6" : "M12 21V4M6 10l6-6 6 6")) + '"/></svg>';
     if (axis === "b") return '<svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>';
     return axis === "h"
       ? '<svg viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>'
@@ -217,18 +282,29 @@
     t.innerHTML = ""; t.style.gridTemplateColumns = "none";
     var cv = el("canvas", "tcv", t), x = hiDPI(cv, side + 8, side + 8);
     x.fillStyle = (getComputedStyle(document.body).getPropertyValue("--frame2") || "").trim() || "#D9CCF7"; rr(x, 0, 0, side + 8, side + 8, 10); x.fill();
+    var hid = mysteryHidden();
     puz.target.forEach(function (m, k) {
       var cx = 4 + (k % n) * (tc + g), cy = 4 + Math.floor(k / n) * (tc + g);
+      if (hid[k]) { x.fillStyle = "#B7A9DC"; rr(x, cx, cy, tc, tc, 5); x.fill(); x.fillStyle = "#fff"; x.font = "700 " + Math.round(tc * 0.7) + "px Fredoka, system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText("?", cx + tc / 2, cy + tc / 2 + 1); return; }
+      if (cellIs("walls", k)) { x.fillStyle = WELL; rr(x, cx, cy, tc, tc, 5); x.fill(); stone(x, cx, cy, tc); return; }
       x.fillStyle = m ? maskColor(m) : WELL; rr(x, cx, cy, tc, tc, 5); x.fill(); // exactly the colours the board shows
       if (m) { x.strokeStyle = "rgba(255,255,255,.85)"; x.lineWidth = 1.5; rr(x, cx + 1, cy + 1, tc - 2, tc - 2, 4); x.stroke(); x.fillStyle = "rgba(255,255,255,.35)"; rr(x, cx + tc * 0.16, cy + tc * 0.14, tc * 0.36, Math.max(2.5, tc * 0.1), 1.5); x.fill(); }
       if (prefs.patterns && m) patternInto(x, m, cx, cy, tc);
     });
     t.setAttribute("role", "img"); t.setAttribute("aria-label", "Target picture, " + n + " by " + n);
   }
+  function mysteryHidden() { // which target cells are still "?" on a mystery level
+    var out = {}; if (!puz || !puz.mystery || !state || state.status === "won") return out;
+    var total = n * n, order = [], k; for (k = 0; k < total; k++) order.push(k);
+    order.sort(function (a, b) { return ((a * 7919 + puz.level * 104729) % 1009) - ((b * 7919 + puz.level * 104729) % 1009); });
+    var base = Math.ceil(total * 0.4), per = Math.ceil((total - base) / Math.max(1, parOf(puz) - 1)), shown = Math.min(total, base + per * (state.reveal || 0));
+    for (k = shown; k < total; k++) out[order[k]] = 1;
+    return out;
+  }
   // Glass is drawn as one raised piece per pane: coloured body, soft top light, a glossy diagonal
   // streak, a bright rim on the top-left edge, a darker rim bottom-right and a drop shadow. Empty
   // slots are recessed wells, so the glass clearly sits on top of the board.
-  var WELL = "#E1D8F1", paneSprites = [], glassCv = null, shimmerT = -1, liftPi = -1;
+  var WELL = (SKINS[prog.skin] || SKINS.classic).well, paneSprites = [], glassCv = null, shimmerT = -1, liftPi = -1;
   function rrPath(ctx, x, y, w, h, r) { ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
   function panePath(ctx, p, ox, oy) { // the cells of a pane joined into one shape
     var R = Math.round(CELL * 0.2), on = {}; p.cells.forEach(function (c) { on[c[0] + "," + c[1]] = 1; });
@@ -261,10 +337,10 @@
     x.globalCompositeOperation = "source-in"; x.fillStyle = col; x.fillRect(0, 0, W, H);
     return c;
   }
-  function makeSprite(p) {
-    var W = p.w * STEP - GAP, H = p.h * STEP - GAP, b = Math.max(3, CELL / 18), R = Math.round(CELL * 0.2);
+  function makeSprite(p, idx) {
+    var W = p.w * STEP - GAP, H = p.h * STEP - GAP, b = Math.max(3, CELL / 18), R = Math.round(CELL * 0.2), fz = frosted(idx);
     var body = document.createElement("canvas"), s = hiDPI(body, W, H);
-    panePath(s, p, 0, 0); s.fillStyle = HEX[p.color]; s.fill();
+    panePath(s, p, 0, 0); s.fillStyle = fz ? "#DCE2EA" : HEX[p.color]; s.fill();
     s.globalCompositeOperation = "source-atop";
     p.cells.forEach(function (c) { // a soft top light and a small gloss per cell; cells line up, so stacked glass stays clean
       var lx = c[1] * STEP, ly = c[0] * STEP, lg = s.createLinearGradient(0, ly, 0, ly + CELL * 0.55);
@@ -275,13 +351,14 @@
     s.globalCompositeOperation = "source-over";
     var deco = document.createElement("canvas"), d = hiDPI(deco, W, H);
     d.drawImage(band(p, W, H, 0, b, "rgba(255,255,255,.92)"), 0, 0, W, H); // light rim on the outer edge
-    d.drawImage(band(p, W, H, b, b + 1.6, shade(HEX[p.color], p.locked ? 0.45 : 0.62)), 0, 0, W, H); // the pane's own colour line
+    d.drawImage(band(p, W, H, b, b + 1.6, fz ? "#9AA5B5" : shade(HEX[p.color], p.locked ? 0.45 : 0.62)), 0, 0, W, H); // the pane's own colour line
+    if (fz) { d.save(); panePath(d, p, 0, 0); d.clip(); d.fillStyle = "rgba(255,255,255,.75)"; for (var q = 0; q < p.cells.length * 18; q++) { var fx = ((q * 73 + idx * 19) % 101) / 101 * W, fy = ((q * 37 + idx * 11) % 97) / 97 * H; d.beginPath(); d.arc(fx, fy, Math.max(1, CELL / 40), 0, 6.3); d.fill(); } p.cells.forEach(function (c) { flake(d, c[1] * STEP + CELL * 0.74, c[0] * STEP + CELL * 0.74, CELL * 0.13, "rgba(120,135,160,.7)", 1.5); }); d.restore(); }
     var on = {}; p.cells.forEach(function (c) { on[c[0] + "," + c[1]] = 1; });
     d.lineCap = "round";
     p.cells.forEach(function (c) { // soft grooves between the cells of one piece
       var px = c[1] * STEP, py = c[0] * STEP, gx = px + CELL + GAP / 2, gy = py + CELL + GAP / 2, m = R * 0.9;
       function groove(x1, y1, x2, y2, vx, vy) {
-        d.strokeStyle = shade(HEX[p.color], 0.72); d.globalAlpha = 0.45; d.lineWidth = 1.4; d.beginPath(); d.moveTo(x1, y1); d.lineTo(x2, y2); d.stroke();
+        d.strokeStyle = fz ? "#9AA5B5" : shade(HEX[p.color], 0.72); d.globalAlpha = 0.45; d.lineWidth = 1.4; d.beginPath(); d.moveTo(x1, y1); d.lineTo(x2, y2); d.stroke();
         d.strokeStyle = "#FFFFFF"; d.globalAlpha = 0.45; d.beginPath(); d.moveTo(x1 + vx, y1 + vy); d.lineTo(x2 + vx, y2 + vy); d.stroke(); d.globalAlpha = 1;
       }
       if (on[c[0] + "," + (c[1] + 1)]) groove(gx, py + m, gx, py + CELL - m, 1.4, 0);
@@ -299,20 +376,61 @@
     }
     return { cv: body, deco: deco, W: W, H: H };
   }
-  function makeTiles() { paneSprites = puz.panes.map(makeSprite); glassCv = document.createElement("canvas"); }
+  function makeTiles() { paneSprites = puz.panes.map(function (p, i) { return makeSprite(p, i); }); glassCv = document.createElement("canvas"); }
+  // ---------- v8 mechanic drawing ----------
+  function cellIs(kind, k) { return !!(puz && puz[kind] && puz[kind].indexOf(k) >= 0); }
+  function flake(x, cx, cy, r, col, w) { x.save(); x.strokeStyle = col; x.lineWidth = w; x.lineCap = "round"; for (var a = 0; a < 3; a++) { var t = a * Math.PI / 3, dx = Math.cos(t) * r, dy = Math.sin(t) * r; x.beginPath(); x.moveTo(cx - dx, cy - dy); x.lineTo(cx + dx, cy + dy); x.stroke(); [-1, 1].forEach(function (s) { var bx = cx + s * dx * 0.6, by = cy + s * dy * 0.6, q = r * 0.28; x.beginPath(); x.moveTo(bx + Math.cos(t + 2.4) * q * s, by + Math.sin(t + 2.4) * q * s); x.lineTo(bx, by); x.lineTo(bx + Math.cos(t - 2.4) * q * s, by + Math.sin(t - 2.4) * q * s); x.stroke(); }); } x.restore(); }
+  function stone(x, wx, wy, s) { // a round stone pillar standing in the slot
+    var cx = wx + s / 2, cy = wy + s / 2, r = s * 0.4;
+    x.save(); x.shadowColor = "rgba(30,15,60,.45)"; x.shadowBlur = s / 10; x.shadowOffsetY = s / 22;
+    var g = x.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.1, cx, cy, r); g.addColorStop(0, "#E9E4F2"); g.addColorStop(0.55, "#A79FBA"); g.addColorStop(1, "#6C6484");
+    x.fillStyle = g; x.beginPath(); x.arc(cx, cy, r, 0, 6.3); x.fill(); x.restore();
+    x.strokeStyle = "rgba(60,45,90,.55)"; x.lineWidth = 1.4; x.beginPath(); x.arc(cx, cy, r, 0, 6.3); x.stroke();
+    x.strokeStyle = "rgba(70,55,100,.35)"; x.lineWidth = 1.2; x.beginPath(); x.moveTo(cx - r * 0.5, cy + r * 0.1); x.lineTo(cx - r * 0.1, cy + r * 0.25); x.lineTo(cx + r * 0.2, cy + r * 0.05); x.stroke();
+  }
+  function gemAt(x, cx, cy, r, t) { // a little sparkling diamond
+    x.save(); x.translate(cx, cy); x.scale(1 + 0.06 * Math.sin(t || 0), 1 + 0.06 * Math.sin(t || 0));
+    x.shadowColor = "rgba(0,120,200,.55)"; x.shadowBlur = r * 0.6;
+    x.beginPath(); x.moveTo(0, -r); x.lineTo(r * 0.8, -r * 0.25); x.lineTo(0, r); x.lineTo(-r * 0.8, -r * 0.25); x.closePath();
+    var g = x.createLinearGradient(-r, -r, r, r); g.addColorStop(0, "#BFF4FF"); g.addColorStop(0.5, "#3FB8F5"); g.addColorStop(1, "#2860D8"); x.fillStyle = g; x.fill(); x.shadowBlur = 0;
+    x.strokeStyle = "#fff"; x.lineWidth = Math.max(1.4, r / 7); x.lineJoin = "round"; x.stroke();
+    x.beginPath(); x.moveTo(-r * 0.8, -r * 0.25); x.lineTo(r * 0.8, -r * 0.25); x.moveTo(-r * 0.3, -r * 0.25); x.lineTo(0, r); x.lineTo(r * 0.3, -r * 0.25); x.strokeStyle = "rgba(255,255,255,.7)"; x.lineWidth = 1; x.stroke();
+    x.fillStyle = "#fff"; x.beginPath(); x.arc(-r * 0.28, -r * 0.5, r * 0.12, 0, 6.3); x.fill(); x.restore();
+  }
+  function drawCellMarks(x) { // drawn above the glass: small ice/sand badges, and gems still to collect
+    var b = Math.max(9, CELL * 0.2);
+    for (var k = 0; k < n * n; k++) {
+      var wx = PAD + (k % n) * STEP, wy = PAD + Math.floor(k / n) * STEP;
+      if (cellIs("ice", k) || cellIs("sand", k)) {
+        var bx = wx + CELL - b * 0.72, by = wy + b * 0.72;
+        x.fillStyle = cellIs("ice", k) ? "#EAF8FF" : "#F7E7BF"; x.strokeStyle = cellIs("ice", k) ? "#5AA8D6" : "#B98A3A"; x.lineWidth = 1.3;
+        x.beginPath(); x.arc(bx, by, b * 0.5, 0, 6.3); x.fill(); x.stroke();
+        if (cellIs("ice", k)) flake(x, bx, by, b * 0.32, "#3C8FC4", 1.3);
+        else { x.fillStyle = "#A8772A"; [[-0.18, -0.1], [0.16, -0.14], [0, 0.18]].forEach(function (q) { x.beginPath(); x.arc(bx + q[0] * b, by + q[1] * b, b * 0.08, 0, 6.3); x.fill(); }); }
+      }
+      if (cellIs("gems", k) && state && (state.got || []).indexOf(k) < 0) gemAt(x, wx + CELL / 2, wy + CELL / 2, CELL * 0.24, gemT);
+    }
+  }
+  var gemT = 0;
+  function frosted(i) { return !!(puz && puz.frost && puz.frost.indexOf(i) >= 0 && !(state && state.thawed && state.thawed[i])); }
   function drawBoard() {
     if (!boardCv || !puz) return;
     var side = PAD * 2 + n * STEP - GAP, x = boardCv.getContext("2d"), k = boardCv.width / side;
     x.setTransform(k, 0, 0, k, 0, 0); x.globalCompositeOperation = "source-over"; x.clearRect(0, 0, side, side);
-    var fr = x.createLinearGradient(0, 0, 0, side); fr.addColorStop(0, "#F6F2FF"); fr.addColorStop(1, "#D6C8F5");
+    var sk = SKINS[prog.skin] || SKINS.classic, fcol = puz.boss ? ["#FFF1B8", "#E5A92E"] : sk.fr;
+    var fr = x.createLinearGradient(0, 0, 0, side); fr.addColorStop(0, fcol[0]); fr.addColorStop(1, fcol[1]);
     x.fillStyle = fr; rr(x, 0, 0, side, side, 24); x.fill();
+    if (puz.boss) { x.strokeStyle = "#B87A00"; x.lineWidth = 3; rr(x, 1.5, 1.5, side - 3, side - 3, 23); x.stroke(); x.strokeStyle = "rgba(255,255,255,.8)"; x.lineWidth = 1.5; rr(x, 4, 4, side - 8, side - 8, 21); x.stroke(); }
     var R = Math.round(CELL * 0.2);
     for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) { // recessed empty slots
-      var wx = PAD + c * STEP, wy = PAD + r * STEP;
+      var wx = PAD + c * STEP, wy = PAD + r * STEP, ck = r * n + c;
       x.save(); rr(x, wx, wy, CELL, CELL, R); x.clip();
-      x.fillStyle = WELL; x.fillRect(wx, wy, CELL, CELL);
+      x.fillStyle = cellIs("ice", ck) ? "#D9F1FF" : cellIs("sand", ck) ? "#F3E0B0" : WELL; x.fillRect(wx, wy, CELL, CELL);
+      if (cellIs("sand", ck)) { x.fillStyle = "rgba(170,120,40,.45)"; for (var sd = 0; sd < 14; sd++) { var hx = ((ck * 37 + sd * 53) % 97) / 97, hy = ((ck * 61 + sd * 29) % 89) / 89; x.beginPath(); x.arc(wx + CELL * (0.12 + hx * 0.76), wy + CELL * (0.12 + hy * 0.76), Math.max(1.2, CELL / 34), 0, 6.3); x.fill(); } }
+      if (cellIs("ice", ck)) flake(x, wx + CELL / 2, wy + CELL / 2, CELL * 0.3, "rgba(80,160,210,.55)", 2);
       var ish = x.createLinearGradient(0, wy, 0, wy + CELL); ish.addColorStop(0, "rgba(60,30,130,.24)"); ish.addColorStop(0.22, "rgba(60,30,130,0)"); ish.addColorStop(0.85, "rgba(255,255,255,0)"); ish.addColorStop(1, "rgba(255,255,255,.75)");
       x.fillStyle = ish; x.fillRect(wx, wy, CELL, CELL); x.restore();
+      if (cellIs("walls", ck)) stone(x, wx, wy, CELL);
     }
     puz.panes.forEach(function (p, i) { // drop shadows (the glass covers its own)
       var o = vis[i], up = i === liftPi; x.save();
@@ -328,6 +446,7 @@
     puz.panes.forEach(function (p, i) { // outlines on top, so stacked glass shows both edges
       var sp = paneSprites[i]; x.drawImage(sp.deco, PAD + vis[i][0], PAD + vis[i][1], sp.W, sp.H);
     });
+    drawCellMarks(x);
     puz.panes.forEach(function (p, i) {
       var o = vis[i], focus = paneEls[i] === document.activeElement && !TEST, hinted = hintPi === i;
       if (shimmerT >= 0 && !p.locked) { // idle shimmer: a soft light sweeps over the movable glass
@@ -387,13 +506,15 @@
     puz.panes.forEach(function (p, pi) {
       var pe = el("div", "pane", boardEl); pe.tabIndex = 0; pe.dataset.pane = pi;
       pe.setAttribute("role", "button");
-      pe.setAttribute("aria-label", NAME[p.color] + " glass, " + (p.locked ? "locked in place" : "slides " + (p.axis === "h" ? "left and right" : p.axis === "v" ? "up and down" : "any direction") + ". Use arrow keys."));
+      var owd = puz.oneway && puz.oneway[pi];
+      pe.setAttribute("aria-label", (frosted(pi) ? "Frosted" : NAME[p.color]) + " glass, " + (p.locked ? "locked in place" : owd ? "one way, slides " + (p.axis === "h" ? (owd > 0 ? "right" : "left") : (owd > 0 ? "down" : "up")) + " only. Use arrow keys." : "slides " + (p.axis === "h" ? "left and right" : p.axis === "v" ? "up and down" : "any direction") + ". Use arrow keys."));
       if (p.locked) pe.classList.add("locked");
       pe.style.width = p.w * STEP - GAP + "px"; pe.style.height = p.h * STEP - GAP + "px";
       pe.addEventListener("keydown", function (e) { keyMove(e, pi); });
       pe.addEventListener("focus", paint); pe.addEventListener("blur", paint);
       paneEls.push(pe);
-      var gr = el("div", "grip" + (p.locked ? " lock" : ""), boardEl); gr.innerHTML = p.locked ? LOCK_SVG : arrowSVG(p.axis); gripEls.push(gr);
+      var ow = puz.oneway && puz.oneway[pi];
+      var gr = el("div", "grip" + (p.locked ? " lock" : "") + (ow ? " oneway" : ""), boardEl); gr.innerHTML = p.locked ? LOCK_SVG : arrowSVG(p.axis, ow); gripEls.push(gr);
     });
     puz.panes.forEach(function (p, pi) { place(pi, state.pos[pi]); });
     el("div", "sparkle", boardEl);
@@ -543,6 +664,8 @@
     var p = puz.panes[pi], to = E.glideTo(puz, state.pos, pi, d);
     hideCoach(false);
     if (to === state.pos[pi]) {
+      if (puz.oneway && puz.oneway[pi] && puz.oneway[pi] !== d) toast("➡️ One way only");
+      else if (frosted(pi) && mode === "level") toast("🌫️ Move it to thaw");
       var o = vis[pi], b = 0.12 * STEP * d;
       animateTo(pi, p.axis === "h" ? [o[0] + b, o[1]] : [o[0], o[1] + b], 180, null, true);
       sfx.step(); buzz(6);
@@ -579,11 +702,29 @@
       if (hintPi === pi || puz.glide) clearHint(); updateStarLine();
     }
     updateUndo();
+    if (puz.glide && mode === "level") afterMove(pi, prevPos[pi], pos, ms || 0);
     var img = E.render(puz, state.pos), fx = function () { sparkleMixes(before, img); showNewMix(img); };
     if (ms) setTimeout(fx, ms * 0.8); else fx();
     if (E.diffCount(img, puz.target) === 0) { if (ms) { locked = true; setTimeout(win, ms); } else win(); }
     else if (mode === "tutorial") setTimeout(coachTutorial, (ms || 0) + 250);
     else if (puz.glide && E.distOf(puz, state.pos) < 0) setTimeout(function () { if (state.status === "playing") { flashTip("↶ Stuck! Undo", 2600); mark("stuck", "btnUndo", 300); } }, (ms || 0) + 150);
+  }
+  function afterMove(pi, from, to, ms) { // v8: thaw frosted glass, collect gems, reveal more of a mystery picture
+    if (frosted(pi)) { state.thawed[pi] = 1; setTimeout(function () { paneSprites[pi] = makeSprite(puz.panes[pi], pi); burst(pi); drawBoard(); sfx.mix(); }, ms * 0.6); }
+    if (puz.gems) {
+      var hit = E.sweptCells(puz, pi, from, to).filter(function (k) { return puz.gems.indexOf(k) >= 0 && state.got.indexOf(k) < 0; });
+      hit.forEach(function (k, j) { state.got.push(k); setTimeout(function () { gemPop(k); sfx.star(Math.min(2, state.got.length - 1)); buzz(10); drawBoard(); updateGems(true); }, ms * 0.5 + j * 120); });
+    }
+    if (puz.mystery) { state.reveal = (state.reveal || 0) + 1; setTimeout(paintTarget, ms * 0.7); }
+  }
+  function burst(pi) { var p = puz.panes[pi]; E.paneCells(p, state.pos[pi]).forEach(function (c) { sparkAt(PAD + c[1] * STEP + CELL / 2, PAD + c[0] * STEP + CELL / 2, 2, ""); }); }
+  function sparkAt(cx, cy, k, cls) { for (var j = 0; j < k; j++) { var s = el("i", "spk" + (cls ? " " + cls : ""), boardEl), a = Math.random() * 6.28, d = CELL * (0.35 + Math.random() * 0.3); s.style.left = cx + "px"; s.style.top = cy + "px"; s.style.setProperty("--dx", Math.cos(a) * d + "px"); s.style.setProperty("--dy", Math.sin(a) * d + "px"); s.style.animationDelay = j * 60 + "ms"; setTimeout(function (x) { x.remove(); }.bind(null, s), 900); } }
+  function gemPop(k) { sparkAt(PAD + (k % n) * STEP + CELL / 2, PAD + Math.floor(k / n) * STEP + CELL / 2, 5, "gem"); }
+  function updateGems(bounce) {
+    var g = $("gemCt"); if (!g) return;
+    if (!puz || !puz.gems || mode !== "level") { g.hidden = true; return; }
+    g.hidden = false; g.innerHTML = "<i class='ico gem'></i><b>" + state.got.length + "</b><span class='slash'>/</span><b>" + puz.gems.length + "</b>";
+    if (bounce) { g.classList.remove("bounce"); void g.offsetWidth; g.classList.add("bounce"); }
   }
   function updateMoves(bounce) {
     var m = $("moves"); m.textContent = state.moves;
@@ -672,6 +813,8 @@
     stats.streak = stats.lastWin === E.addDays(date, -1) ? stats.streak + 1 : 1;
     stats.lastWin = date; stats.best = Math.max(stats.best, stats.streak);
     state.recorded = true; save(GKEY, state); save("ps2:stats", stats);
+    if (!prog.dailyShards[date]) { prog.dailyShards[date] = 1; prog.shards += 5; state.shards = 5; lvSave(); syncHud(); }
+    checkAch();
   }
   function currentStreak() { return (stats.lastWin === today || stats.lastWin === E.addDays(today, -1)) ? stats.streak : 0; }
   function shareText() {
@@ -701,6 +844,7 @@
     $("endStars").innerHTML = starsHTML(k, "pop"); playStars(k);
     var h = chipHTML("foot", state.moves + " <small>/</small> <i class='ico flag'></i>" + parOf(puz));
     if (!practice && currentStreak() > 0) h += chipHTML("fire", currentStreak());
+    if (state.shards) h += chipHTML("shard", "+" + state.shards, "plus");
     h += chipHTML("clock", countdownText());
     $("endStats").innerHTML = h;
     d.showModal();
@@ -714,6 +858,9 @@
     h += "<div class='dist'>" + stats.dist.map(function (v, i) { return "<div class='bar" + (hl === i ? " me" : "") + "'><span class='lb'>" + labels[i] + "</span><b style='width:" + Math.max(10, Math.round(v / max * 100)) + "%'>" + v + "</b></div>"; }).join("") + "</div>";
     h += "<div class='sect'><i class='ico medal'></i>Levels</div><div class='tiles'>" + tile("star", totalStars(), "Stars") + tile("flag", prog.unlocked - 1, "Levels cleared") + tile("spark", prog.bestPerf || 0, "Best perfect run") + "</div>";
     if (ri >= 0) h += "<div class='tiles' style='margin-top:8px'><div class='tile wide'><i class='ico medal'></i><b>" + RANKS[ri][1] + "</b></div></div>";
+    h += "<div class='sect'><i class='ico trophy'></i>Records</div><div class='tiles'>" + tile("spark", Object.keys(prog.perfSet).length, "Perfect levels") + tile("gem", prog.gemTotal, "Gems") + tile("crown", prog.boss.length, "Bosses") + "</div>";
+    h += "<div class='tiles' style='margin-top:8px'>" + tile("shard", prog.shards, "Shards") + tile("gift", prog.login.best || 0, "Best gift streak") + tile("fire", prog.bestPerf || 0, "Best perfect run") + "</div>";
+    h += "<div class='sect'><i class='ico medal'></i>Badges " + prog.ach.length + "/" + ACH.length + "</div><div class='achs'>" + ACH.map(function (a) { var got = prog.ach.indexOf(a[0]) >= 0; return "<div class='ach" + (got ? " got" : "") + "' aria-label='" + a[2] + (got ? ", earned" : ", " + a[3]) + "'><span class='ai'>" + (got ? a[1] : "🔒") + "</span><span class='at'><b>" + a[2] + "</b><small>" + a[3] + "</small></span></div>"; }).join("") + "</div>";
     return h;
   }
   function countdownText() {
@@ -795,18 +942,24 @@
     if (prog.threeSince >= 3) { prog.threeSince = 0; giveHint("three 3-star levels"); }
     var mile = isMilestone(N) && prog.mile.indexOf(N) < 0;
     if (mile) { prog.mile.push(N); giveHint("milestone"); }
-    lvSave(); updateHint();
-    return function () { if (mile) openMilestone(N, gained); else openLevelEnd(st, gained); };
+    // shards: 2 per new star, 3 for a first perfect solve, 1 per new gem, 15 for a first boss win
+    var earn = 2 * Math.max(0, st - prev), perfect = state.moves <= parOf(puz);
+    if (perfect && !prog.perfSet[N]) { prog.perfSet[N] = 1; earn += 3; }
+    var gg = (state.got || []).length, gp = prog.gems[N] || 0; if (gg > gp) { earn += gg - gp; prog.gemTotal += gg - gp; prog.gems[N] = gg; }
+    var bossNew = !!puz.boss && prog.boss.indexOf(N) < 0; if (bossNew) { prog.boss.push(N); earn += 15; }
+    prog.shards += earn; lastEarn = earn;
+    lvSave(); updateHint(); checkAch();
+    return function () { if (mile || bossNew) openMilestone(N, gained, bossNew); else openLevelEnd(st, gained); };
   }
   function totalStars() { var t = 0; for (var k in prog.stars) t += prog.stars[k]; return t; }
-  var lastStars = 0;
+  var lastStars = 0, lastEarn = 0;
   function openLevelEnd(st, gained) {
     lastStars = st; $("hudStars").textContent = totalStars();
     $("lvStars").innerHTML = starsHTML(st, "pop"); playStars(st);
     var perfect = state.moves <= parOf(puz), cheers = ["Great!", "Nice!", "Lovely!", "Well done!", "Sweet!"];
     $("lvTitle").textContent = perfect ? "✨ Perfect!" : st === 3 ? cheers[puz.level % cheers.length] : "Level " + puz.level;
-    $("lvSub").innerHTML = chipHTML("foot", state.moves + " <small>/</small> <i class='ico flag'></i>" + parOf(puz)) + (gained.length ? chipHTML("bulb", "+" + gained.length, "plus") : "");
-    giftBar(puz.level);
+    $("lvSub").innerHTML = chipHTML("foot", state.moves + " <small>/</small> <i class='ico flag'></i>" + parOf(puz)) + (puz.gems ? chipHTML("gem", state.got.length + "<small>/</small>" + puz.gems.length) : "") + (lastEarn ? chipHTML("shard", "+" + lastEarn, "plus") : "") + (gained.length ? chipHTML("bulb", "+" + gained.length, "plus") : "");
+    giftBar(puz.level); $("lvTeaser").innerHTML = teaserHTML(prog.unlocked); syncHud();
     $("dlgLevel").showModal(); setTimeout(function () { confetti(true); }, 200);
     if (perfect) setTimeout(function () { sfx.medal(); }, 1500);
     mark("gift", "giftBar", 1400);
@@ -824,17 +977,19 @@
     if (prog.perf > 1) lines.push("✨ " + prog.perf + " perfect levels in a row");
     lines.push(SITE); return lines.join("\n");
   }
-  function openMilestone(N, gained) {
+  function openMilestone(N, gained, boss) {
     var ri = rankIndex(N), rank = ri >= 0 ? RANKS[ri][1] : "Glass Spark", newRank = ri >= 0 && RANKS[ri][0] === N;
-    $("mileBadge").innerHTML = badgeSVG(N, ri);
-    $("mileKicker").textContent = newRank ? "New rank!" : "Level " + N;
+    $("mileBadge").innerHTML = boss ? "<canvas class='win-cv' aria-label='Stained-glass window restored'></canvas>" : badgeSVG(N, ri);
+    if (boss) drawWindow($("mileBadge").firstChild, 150, Math.floor((N - 1) / 20), 20, true);
+    $("mileKicker").textContent = boss ? "Window restored!" : newRank ? "New rank!" : "Level " + N;
     $("mileTitle").textContent = rank;
     var next = RANKS.filter(function (r) { return r[0] > N; })[0], from = ri >= 0 ? RANKS[ri][0] : 0;
     var pct = next ? Math.round((N - from) / (next[0] - from) * 100) : 100;
     $("rankFill").style.width = "0%"; $("rankBar").hidden = false;
     $("rankNext").innerHTML = "<i class='ico medal'></i>" + (next ? next[0] : "");
     $("rankBar").setAttribute("aria-label", next ? "Next rank at level " + next[0] : "Top rank");
-    var h = chipHTML("star", totalStars()) + (prog.perf > 0 ? chipHTML("spark", prog.perf) : "") + chipHTML("bulb", prog.hints) + (gained.length ? chipHTML("bulb", "+" + gained.length, "plus") : "");
+    var h = chipHTML("star", totalStars()) + (prog.perf > 0 ? chipHTML("spark", prog.perf) : "") + chipHTML("bulb", prog.hints) + (gained.length ? chipHTML("bulb", "+" + gained.length, "plus") : "") + (lastEarn ? chipHTML("shard", "+" + lastEarn, "plus") : "");
+    if (boss) $("mileTitle").textContent = chapterOf(N).name;
     $("mileStats").innerHTML = h;
     $("dlgMile").showModal(); mark("rank", "rankBar", 2400);
     var fill = $("rankFill");
@@ -863,9 +1018,9 @@
         hd.innerHTML = "<span class='ci'>" + ch.icon + "</span><div><b>" + ch.name + "</b><small><i class='ico star'></i>" + got + " / 60</small></div>";
       }
       var st = N < prog.unlocked ? "done" : N === prog.unlocked ? "current" : "locked";
-      var b = el("button", "node " + st + (E.isChallenge(N) ? " chal" : ""), path);
+      var b = el("button", "node " + st + (E.isChallenge(N) ? " chal" : "") + (N % 20 === 0 ? " boss" : "") + (E.introAt(N) ? " intro" : ""), path);
       b.style.left = Math.round(Math.sin(N * 0.8) * 92) + "px";
-      var tag = E.isChallenge(N) ? "trophy" : isMilestone(N) ? "medal" : "";
+      var tag = N % 20 === 0 ? "crown" : E.introAt(N) ? "newg" : E.isChallenge(N) ? "trophy" : isMilestone(N) ? "medal" : "";
       b.innerHTML = "<span class='nb'>" + (st === "locked" ? LOCK_SVG : N) + "</span>" + (tag ? "<i class='ico tag " + tag + "'></i>" : "") + (st === "done" ? "<span class='ns'>" + starsHTML(prog.stars[N] || 0) + "</span>" : "") +
         (st === "current" ? "<span class='you'><i style='left:8px;top:9px;background:" + HEX.C + "'></i><i style='left:17px;top:9px;background:" + HEX.M + "'></i><i style='left:12px;top:17px;background:" + HEX.Y + "'></i></span>" : "");
       b.style.position = "relative";
@@ -875,14 +1030,21 @@
       if (st === "current") cur = b;
       nodes.push(b);
     }
-    $("hudStars").textContent = totalStars();
-    $("playNextN").textContent = prog.unlocked;
+    $("hudStars").textContent = totalStars(); syncHud();
+    $("playNextN").textContent = prog.unlocked; $("mapTeaser").innerHTML = teaserHTML(prog.unlocked);
     requestAnimationFrame(function () {
       path.style.paddingBottom = $("mapBar").offsetHeight + 34 + "px"; // last node always clears the PLAY bar
       drawRoad(path, nodes);
       if (cur) { var r = cur.getBoundingClientRect(), bar = $("mapBar").getBoundingClientRect(), top = $("hud").getBoundingClientRect().bottom;
         window.scrollTo(0, Math.max(0, window.scrollY + r.top + r.height / 2 - (top + (bar.top - top) * 0.55))); } // middle of the visible part, above the PLAY bar
     });
+  }
+  // The "next unlock" line: the next new kind of glass, or the chapter boss and its window.
+  function teaserHTML(N) {
+    var nx = E.nextIntro(N - 1), boss = Math.ceil(N / 20) * 20, ch = chapterOf(boss);
+    if (nx && nx.at <= boss) { var k = nx.at - N, inf = MECH_INFO[nx.key]; return "<span class='tz-ic'>" + inf[0] + "</span><span class='tz-tx'>" + (k <= 0 ? "New glass: <b>" + inf[1] + "</b>!" : "<b>" + k + "</b> " + (k === 1 ? "level" : "levels") + " to <b>" + inf[1] + "</b>") + "</span>"; }
+    var lit = Math.max(0, Math.min(20, N - 1 - (Math.ceil(N / 20) - 1) * 20)), kb = boss - N;
+    return "<span class='tz-ic'>👑</span><span class='tz-tx'>" + (kb <= 0 ? "Boss level: restore the window!" : "<b>" + kb + "</b> to the boss · window " + lit + "/20") + "</span>";
   }
   function drawRoad(path, nodes) {
     var pr = path.getBoundingClientRect(), pts = nodes.map(function (b) { var r = b.getBoundingClientRect(); return [r.left - pr.left + r.width / 2, r.top - pr.top + r.height / 2]; });
@@ -900,8 +1062,85 @@
     setBadge("<i class='ico medal' style='width:26px;height:26px'></i>", "Rank", ri >= 0 ? RANKS[ri][1] : "Rookie");
     showView("map"); renderMap(); clearMarks();
     mark("map", function () { return document.querySelector(".node.current") || $("btnPlayNext"); }, 700);
+    if (prog.unlocked > 8) mark("teaser", "mapTeaser");
   }
 
+  // ---------- v8: Glass House (stained-glass windows), shop, daily gift ----------
+  function hashN(a) { a = (a ^ 61) ^ (a >>> 16); a = a + (a << 3); a = a ^ (a >>> 4); a = Math.imul(a, 0x27d4eb2d); return (a ^ (a >>> 15)) >>> 0; }
+  function pieceOrder(k) { var o = []; for (var i = 0; i < 20; i++) o.push(i); return o.sort(function (a, b) { return hashN(k * 977 + a) - hashN(k * 977 + b); }); }
+  function drawWindow(cv, size, k, lit, restored, fresh) { // chapter k's round window: 4 rings x 5 pieces; `lit` of 20 glow
+    var x = hiDPI(cv, size, size), c = size / 2, R0 = size / 2 - 5, ch = CHAPTERS[k % CHAPTERS.length];
+    var pal = [HEX.C, HEX.M, HEX.Y, maskColor(3), maskColor(5), maskColor(6), ch.sc[1], ch.sc[2], ch.sc[6]];
+    var on = {}; pieceOrder(k).slice(0, lit).forEach(function (p) { on[p] = 1; });
+    if (restored) { var gl = x.createRadialGradient(c, c, R0 * 0.6, c, c, R0 + 5); gl.addColorStop(0, "rgba(255,230,120,.9)"); gl.addColorStop(1, "rgba(255,200,60,0)"); x.fillStyle = gl; x.beginPath(); x.arc(c, c, R0 + 5, 0, 6.3); x.fill(); }
+    x.fillStyle = restored ? "#D99A1E" : "#5B5375"; x.beginPath(); x.arc(c, c, R0, 0, 6.3); x.fill();
+    var R1 = R0 - Math.max(3, size / 30), radii = [0, 0.3, 0.55, 0.78, 1];
+    for (var p = 0; p < 20; p++) {
+      var ring = Math.floor(p / 5), sec = p % 5, tw = ring * 0.63 + k * 0.4, a0 = -Math.PI / 2 + sec * 2 * Math.PI / 5 + tw, a1 = a0 + 2 * Math.PI / 5, r0 = radii[ring] * R1, r1 = radii[ring + 1] * R1;
+      var piece = function () { x.beginPath(); x.arc(c, c, r1, a0, a1); if (r0 > 0) x.arc(c, c, r0, a1, a0, true); else x.lineTo(c, c); x.closePath(); }; piece();
+      x.fillStyle = on[p] ? pal[hashN(k * 131 + p * 7) % pal.length] : "#7C7596"; x.fill();
+      if (!on[p]) { x.save(); x.clip(); x.strokeStyle = "rgba(255,255,255,.12)"; x.lineWidth = 1; for (var q = -size; q < size; q += 7) { x.beginPath(); x.moveTo(q, 0); x.lineTo(q + size, size); x.stroke(); } x.restore(); }
+      if (fresh === p) { x.save(); x.clip(); x.fillStyle = "rgba(255,255,255,.45)"; x.fillRect(0, 0, size, size); x.restore(); }
+      piece(); x.strokeStyle = "#2A1B4D"; x.lineWidth = Math.max(1.6, size / 70); x.lineJoin = "round"; x.stroke(); // rebuild: the hatch lines replaced the path
+    }
+    var sh = x.createLinearGradient(0, 0, size, size); sh.addColorStop(0, "rgba(255,255,255,.35)"); sh.addColorStop(0.45, "rgba(255,255,255,0)"); x.fillStyle = sh; x.beginPath(); x.arc(c, c, R1, 0, 6.3); x.fill();
+    x.strokeStyle = restored ? "#FFE58A" : "#9C94B6"; x.lineWidth = 2; x.beginPath(); x.arc(c, c, R0 - 1, 0, 6.3); x.stroke();
+  }
+  function litOf(k) { return Math.max(0, Math.min(20, prog.unlocked - 1 - k * 20)); }
+  var houseSel = null;
+  function openHouse(k) {
+    var top = Math.max(0, Math.floor((prog.unlocked - 1) / 20)); if (k == null) k = houseSel != null ? houseSel : Math.min(top, Math.floor((Math.max(1, prog.unlocked - 1) - 1) / 20)); houseSel = k;
+    var ch = chapterOf(k * 20 + 1), lit = litOf(k), done = prog.boss.indexOf((k + 1) * 20) >= 0;
+    drawWindow($("houseBig"), 190, k, lit, done);
+    $("houseName").textContent = ch.icon + " " + ch.name;
+    $("houseSub").innerHTML = done ? "✨ Restored!" : lit + " / 20 pieces · 👑 boss at " + (k + 1) * 20;
+    var row = $("houseRow"); row.innerHTML = "";
+    for (var j = 0; j <= top; j++) (function (j) {
+      var b = el("button", "hw" + (j === k ? " sel" : ""), row), cv = el("canvas", "", b); b.setAttribute("aria-label", chapterOf(j * 20 + 1).name + " window, " + litOf(j) + " of 20");
+      drawWindow(cv, 54, j, litOf(j), prog.boss.indexOf((j + 1) * 20) >= 0); b.addEventListener("click", function () { openHouse(j); });
+    })(j);
+    if (!$("dlgHouse").open) $("dlgHouse").showModal();
+    var sl = row.querySelector(".sel"); if (sl) row.scrollLeft = Math.max(0, sl.offsetLeft - row.offsetLeft - (row.clientWidth - sl.offsetWidth) / 2); // keep the chosen window in view
+  }
+  function shopRow(id, ico, name, price, state2) {
+    var btn = state2 === "use" ? "<button class='cbtn green sb' data-buy='" + id + "'>USE</button>" : state2 === "on" ? "<span class='sb on'>✔</span>" : "<button class='cbtn gold sb' data-buy='" + id + "'" + (prog.shards < price ? " disabled" : "") + "><i class='ico shard'></i>" + price + "</button>";
+    return "<div class='shop-it'><span class='si'>" + ico + "</span><b class='sn'>" + name + "</b>" + btn + "</div>";
+  }
+  function openShop() {
+    var h = "<div class='bal'><i class='ico shard'></i><b>" + prog.shards + "</b> shards</div>";
+    h += "<div class='sect'><i class='ico bulb'></i>Hints</div>" + shopRow("hint", "💡", "+1 hint (" + prog.hints + "/" + HINT_MAX + ")", 15, prog.hints >= HINT_MAX ? "on" : "buy");
+    h += "<div class='sect'>🪟 Boards</div>" + Object.keys(SKINS).map(function (k) { var sk = SKINS[k]; return shopRow("skin:" + k, "<i class='sw' style='background:linear-gradient(" + sk.fr[0] + "," + sk.fr[1] + ")'><i style='background:" + sk.well + "'></i></i>", sk.name, sk.price, prog.skin === k ? "on" : prog.own.indexOf(k) >= 0 ? "use" : "buy"); }).join("");
+    h += "<div class='sect'>🎵 Music</div>" + Object.keys(MOODS).map(function (k) { var m = MOODS[k]; return shopRow("mood:" + k, m.ico, m.name, m.price, prog.mood === k ? "on" : prog.own.indexOf(k) >= 0 ? "use" : "buy"); }).join("");
+    $("shopBody").innerHTML = h;
+    $("shopBody").querySelectorAll("[data-buy]").forEach(function (b) { b.addEventListener("click", function () { buy(b.dataset.buy); }); });
+    if (!$("dlgShop").open) $("dlgShop").showModal();
+  }
+  function buy(id) {
+    var parts = id.split(":"), kind = parts[0], key = parts[1];
+    if (kind === "hint") { if (prog.shards < 15 || prog.hints >= HINT_MAX) return; prog.shards -= 15; prog.hints++; updateHint(); toast("💡 +1 hint"); }
+    else {
+      var item = kind === "skin" ? SKINS[key] : MOODS[key]; if (!item) return;
+      if (prog.own.indexOf(key) < 0) { if (prog.shards < item.price) return; prog.shards -= item.price; prog.own.push(key); toast("✨ " + item.name + "!"); }
+      if (kind === "skin") { prog.skin = key; WELL = item.well; } else { prog.mood = key; music.mood(); }
+    }
+    lvSave(); syncHud(); sfx.star(2); buzz(10); openShop();
+  }
+  function openGift() {
+    var g = giftState(), h = "";
+    for (var d = 1; d <= 7; d++) { var cls = g.ready ? (d < g.day ? "got" : d === g.day ? "now" : "") : (d <= g.day ? "got" : ""); h += "<div class='gd " + cls + (d === 7 ? " big" : "") + "'><small>Day " + d + "</small><b><i class='ico shard'></i>" + GIFT[d - 1] + "</b>" + (d === 7 ? "<em>+💡</em>" : "") + "</div>"; }
+    $("giftDays").innerHTML = h;
+    $("giftMsg").textContent = g.ready ? (g.missed ? "Welcome back! A fresh week starts today." : g.day === 7 ? "Day 7: the big chest!" : "Your gift for today:") : "Come back tomorrow for day " + (g.day % 7 + 1) + "!";
+    $("btnClaim").hidden = !g.ready; $("giftNext").hidden = g.ready; $("giftNext").textContent = "⏳ " + countdownText();
+    $("claimAmt").textContent = "+" + GIFT[(g.day || 1) - 1];
+    if (!$("dlgGift").open) $("dlgGift").showModal();
+  }
+  function claimGift() {
+    var g = giftState(); if (!g.ready) return;
+    var L = prog.login, amt = GIFT[g.day - 1];
+    L.streak = L.last === E.addDays(today, -1) ? (L.streak || 0) + 1 : 1; L.best = Math.max(L.best || 0, L.streak); L.last = today; L.day = g.day;
+    prog.shards += amt; if (g.day === 7 && prog.hints < HINT_MAX) prog.hints++;
+    lvSave(); syncHud(); updateHint(); sfx.medal(); buzz([10, 40, 20]); openGift(); confetti(true); toast("🎁 +" + amt + " shards"); checkAch();
+  }
   function confetti(inDialog) {
     var cv = $("confetti"), dlg = inDialog && document.querySelector("dialog[open]");
     if (dlg) { if (cv.parentNode !== dlg) dlg.appendChild(cv); var dr = dlg.getBoundingClientRect(); cv.style.position = "absolute"; cv.style.left = -dr.left - 4 + "px"; cv.style.top = -dr.top - 4 + "px"; }
@@ -946,8 +1185,14 @@
     map: ["🗺️", "Your journey! Tap here for the next level."],
     music: ["🎵", "Calm music. Tap here to mute it."],
     daily: ["📅", "A fresh puzzle every day. Keep your streak!"],
-    everyone: ["🌍", "Everyone gets this same puzzle today."]
+    everyone: ["🌍", "Everyone gets this same puzzle today."],
+    boss: ["👑", "Chapter boss! Win it to restore this chapter's window."],
+    house: ["🪟", "Every level you clear adds a piece to a stained-glass window."],
+    shop: ["🛍️", "Spend your glass shards on hints, boards and music."],
+    giftday: ["🎁", "A free gift every day. Come back tomorrow for a bigger one!"],
+    teaser: ["✨", "Something new is coming. Keep going!"]
   };
+  ["pillar", "gem", "ice", "sand", "oneway", "frost", "mystery"].forEach(function (k) { MARKS[k] = [MECH_INFO[k][0], MECH_INFO[k][2]]; });
   var markQ = [], markEl = null, markTimer = 0;
   var markOn = !TEST || qs.get("marks") === "1"; // automated tests switch them off unless asked
   function seen(key) { return prefs.marks.indexOf(key) >= 0; }
@@ -1010,6 +1255,15 @@
     var lk = puz.panes.map(function (p, i) { return p.locked ? i : -1; }).filter(function (i) { return i >= 0; })[0];
     if (lk !== undefined) mark("locked", function () { return paneRect(lk); }, 500);
     if (puz.twist === "duo") mark("duo", "target", 500);
+    function cellR(list) { return function () { if (!list || !list.length) return null; var k = list[0], b = boardEl.getBoundingClientRect(); return { left: b.left + PAD + (k % n) * STEP, top: b.top + PAD + Math.floor(k / n) * STEP, width: CELL, height: CELL }; }; }
+    if (puz.walls) mark("pillar", cellR(puz.walls), 500);
+    if (puz.ice) mark("ice", cellR(puz.ice), 500);
+    if (puz.sand) mark("sand", cellR(puz.sand), 500);
+    if (puz.gems) mark("gem", cellR(puz.gems), 500);
+    if (puz.oneway) { var oi = +Object.keys(puz.oneway)[0]; mark("oneway", function () { return paneRect(oi); }, 500); }
+    if (puz.frost) { var fi = puz.frost[0]; mark("frost", function () { return paneRect(fi); }, 500); }
+    if (puz.mystery) mark("mystery", "target", 500);
+    if (puz.boss) mark("boss", "lvBadge", 500);
     if (puz.challenge) mark("challenge", "lvBadge", 500);
     if (puz.breather) mark("breather", "lvBadge", 500);
   }
@@ -1023,7 +1277,7 @@
   // make it crackle. Each take is normalised to -3 dBFS and the output goes through a limiter.
   var music = (function () {
     var api = { started: false, playing: false, takes: [] }, out = null, srcs = [], timer = 0, nextAt = 0, turn = 0, rendering = null;
-    var BPM = 70, BEAT = 60 / BPM, BAR = BEAT * 8, BARS = 9, LOOP = BAR * BARS, TAIL = 3.5, RATE = 22050;
+    var ver = 0, BPM = 70, BEAT = 60 / BPM, BAR = BEAT * 8, BARS = 9, LOOP = BAR * BARS, TAIL = 3.5, RATE = 22050;
     var CH = [[48, 55, 64, 71], [45, 52, 60, 67], [41, 48, 57, 64], [43, 50, 59, 64], [38, 50, 57, 64], [40, 47, 55, 62]];
     var GO = [[1, 2, 4, 5], [2, 4, 3], [0, 3, 4], [0, 1, 5], [3, 2, 0], [1, 2]], PENT = [72, 74, 76, 79, 81, 84, 86, 88];
     function hz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
@@ -1051,6 +1305,13 @@
         osc.connect(g); g.connect(bus); if (toWet) g.connect(wet);
         osc.start(t); osc.stop(env(g, t, peak, att, hold, rel));
       }
+      var mood = prog.mood || "cafe", RAIN = mood === "rain", BOX = mood === "box";
+      if (RAIN) { // soft rain: filtered noise that fades in and out with the take, so takes cross-fade evenly
+        var nb = o.createBuffer(1, len, RATE), nd = nb.getChannelData(0), lp1 = 0; for (var ni = 0; ni < len; ni++) { lp1 = lp1 * 0.6 + (Math.random() * 2 - 1) * 0.4; nd[ni] = lp1; }
+        var ns = o.createBufferSource(); ns.buffer = nb; var bp = o.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1800; bp.Q.value = 0.6;
+        var ng = o.createGain(); ng.gain.setValueAtTime(0, 0); ng.gain.linearRampToValueAtTime(0.06, TAIL); ng.gain.setValueAtTime(0.06, LOOP); ng.gain.linearRampToValueAtTime(0, LOOP + TAIL);
+        ns.connect(bp); bp.connect(ng); ng.connect(bus); ns.start(0);
+      }
       var seq = progression(), last = -1;
       seq.forEach(function (chord, bar) {
         var t0 = bar * BAR;
@@ -1058,17 +1319,20 @@
           var lp = o.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900; lp.connect(bus); lp.connect(wet);
           [-5, 5].forEach(function (cents) {
             var osc = o.createOscillator(), g = o.createGain(); osc.type = i === 0 ? "sine" : "triangle"; osc.frequency.value = hz(m); osc.detune.value = cents;
-            osc.connect(g); g.connect(lp); osc.start(t0); osc.stop(env(g, t0, i === 0 ? 0.05 : 0.022, 1.8, BAR - 1.8, 2.6));
+            osc.connect(g); g.connect(lp); osc.start(t0); osc.stop(env(g, t0, (i === 0 ? 0.05 : 0.022) * (BOX ? 0.55 : 1), 1.8, BAR - 1.8, 2.6));
           });
         });
         for (var b = 0; b < 8; b++) for (var half = 0; half < 2; half++) {
           var t = Math.max(0.01, t0 + b * BEAT + half * BEAT / 2 + (Math.random() - 0.5) * 0.02);
-          if (b < 7 && Math.random() < (half ? 0.22 : 0.42) && t < LOOP - 0.4) {
+          if (b < 7 && Math.random() < (half ? (RAIN ? 0.1 : 0.22) : (RAIN ? 0.3 : 0.42)) && t < LOOP - 0.4) {
             var pool = PENT.filter(function (q) { return q !== last; }), m = pool[Math.floor(Math.random() * pool.length)];
             if (last > 0 && Math.random() < 0.6) { var near = pool.filter(function (q) { return Math.abs(q - last) <= 5; }); if (near.length) m = near[Math.floor(Math.random() * near.length)]; }
             last = m; var v = 0.05 + Math.random() * 0.03;
-            note(hz(m), t, "sine", v, 0.008, 0.05, 1.3, true);           // marimba-ish body
-            note(hz(m) * 4, t, "sine", v * 0.22, 0.004, 0, 0.16, false); // its quick bright partial
+            if (BOX) { var bt = hz(m + 12) < 800 ? m + 12 : m; note(hz(bt), t, "sine", v * 0.7, 0.01, 0.02, 1.6, true); note(hz(bt + 12), t, "sine", v * 0.05, 0.008, 0, 0.25, false); } // music-box tine
+            else {
+              note(hz(m), t, "sine", v, 0.008, 0.05, 1.3, true);           // marimba-ish body
+              note(hz(m) * 4, t, "sine", v * 0.22, 0.004, 0, 0.16, false); // its quick bright partial
+            }
           }
         }
         if (Math.random() < 0.35) note(hz(PENT[4 + Math.floor(Math.random() * 3)] + 12), t0 + BEAT * 4, "sine", 0.016, 0.01, 0, 2.6, true); // a little bell
@@ -1087,12 +1351,14 @@
     function ensureTakes() {
       if (api.takes.length >= 2) return Promise.resolve();
       if (rendering) return rendering;
-      rendering = renderTake().then(function (b) { api.takes.push(b); rendering = null; if (api.takes.length < 2) setTimeout(ensureTakes, 4000); }, function () { rendering = null; });
+      var v0 = ver;
+      rendering = renderTake().then(function (b) { rendering = null; if (v0 !== ver) { ensureTakes(); return; } api.takes.push(b); if (api.takes.length < 2) setTimeout(ensureTakes, 4000); }, function () { rendering = null; });
       return rendering;
     }
     function level() { return 0.9 * Math.pow(prefs.musicVol, 1.3); } // even-feeling slider; 18% is a soft background
     function queue() { // keep the next take queued on the audio clock, a whole take ahead
       if (!api.playing || !api.takes.length) return;
+      if (nextAt < ac.currentTime) nextAt = ac.currentTime + 0.05; // never stack takes after a late start
       while (nextAt < ac.currentTime + LOOP * 0.6) {
         var b = api.takes[turn % api.takes.length]; turn++;
         var src = ac.createBufferSource(); src.buffer = b; src.connect(out);
@@ -1101,6 +1367,7 @@
         nextAt += LOOP; // the next take starts while this one's tail rings out: seamless
       }
     }
+    api.mood = function () { ver++; api.takes = []; var was = api.playing; api.stop(); if (was) setTimeout(function () { api.start(); }, 450); };
     api.vol = function () { if (out && api.playing) out.gain.setTargetAtTime(level(), ac.currentTime, 0.15); };
     api.start = function () {
       if (api.playing || document.hidden || !actx()) return;
@@ -1191,6 +1458,9 @@
     $("btnMileShare").addEventListener("click", function () { var N = puz.level, ri = rankIndex(N); shareOut(mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark")); });
     $("btnSkip").addEventListener("click", function () { prefs.tutDone = true; prefs.glideTut = true; save("ps2:prefs", prefs); hideCoach(true); startDaily(); });
     $("btnUndo").addEventListener("click", undo);
+    $("btnHouse").addEventListener("click", function () { houseSel = null; openHouse(); });
+    $("btnShop").addEventListener("click", openShop); $("chipShards").addEventListener("click", openShop);
+    $("btnGift").addEventListener("click", openGift); $("btnClaim").addEventListener("click", claimGift);
     var rz; window.addEventListener("resize", function () { clearTimeout(rz); rz = setTimeout(function () { if (mode === "map" || mode === "home" || anims.length) return; clearHint(); build(); if (mode === "tutorial") coachTutorial(); }, 150); });
   }
 
@@ -1204,7 +1474,7 @@
 
   if (TEST) window.PS = {
     get puzzle() { return puz; }, get state() { return state; }, get mode() { return mode; }, shareText: shareText, mileShareText: function () { var N = puz.level, ri = rankIndex(N); return mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark"); },
-    get progress() { return prog; }, hint: useHint, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; }, get music() { return { on: prefs.music, vol: prefs.musicVol, playing: music.playing }; }, musicCheck: function () { return music.check(); }, get markShown() { return markEl ? markEl.dataset.key : null; },
+    get progress() { return prog; }, hint: useHint, openHouse: openHouse, openShop: openShop, openGift: openGift, claimGift: claimGift, teaser: function (N) { return teaserHTML(N); }, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; }, get music() { return { on: prefs.music, vol: prefs.musicVol, playing: music.playing }; }, musicCheck: function () { return music.check(); }, get markShown() { return markEl ? markEl.dataset.key : null; },
     grabPoint: function (pi) { // centre of a cell of pane pi that no other same-axis pane covers
       var p = puz.panes[pi], r = boardEl.getBoundingClientRect(), cells = E.paneCells(p, state.pos[pi]);
       var only = cells.filter(function (c) { return panesAt(c).every(function (q) { return q === pi || puz.panes[q].locked; }); });

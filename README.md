@@ -26,7 +26,22 @@ Static site: no build step, no server, no accounts. To host it, publish this fol
   - In every block of 10, levels ending in 1 and 6 are breathers, and levels ending in 9 are a little harder (trophy on the map).
   - Breathers and levels ending in 2 must be solvable by the obvious moves (a "greedy" player), so wins come often.
   - Only the "aha" levels must defeat the greedy player, so the tricky ones are spaced out. These are the levels ending in 4 and 9 (from level 7), and in 7 (from level 40). Other levels come as they are.
-  - Twists: locked glass (a stopper, shown with metal bolts) from level 12, and two-colour levels from 18.
+  - New kinds of glass (v8). Each one first appears alone on a "teach" level, which is a little easier (par − 1) and has a ✨ tip. Then it keeps coming back:
+
+    | Level | New glass | What it does |
+    |---|---|---|
+    | 12 | 🔩 Locked glass | can't move; a stopper |
+    | 18 | 🎨 Two colours | the picture uses two-colour mixes |
+    | 25 | 🧱 Pillars | stone blocks that glass can't pass |
+    | 33 | 💎 Gems | slide glass over them for bonus shards (they sit on the best route) |
+    | 42 | ❄️ Ice | glass never sticks on ice, it keeps gliding |
+    | 52 | 🏖️ Sand | glass stops as soon as it reaches more sand |
+    | 64 | ➡️ One-way glass | glides only the way its arrow points |
+    | 78 | 🌫️ Frosted glass | hides its colour until you move it |
+    | 95 | ❓ Mystery picture | the target shows itself bit by bit as you swipe |
+
+  - Rotation: each chapter of 20 levels features the two kinds that were featured least recently (about 6–7 levels each) and brings every other known kind back once. A level has at most 2 kinds; 3 only on rare challenge levels after 100. Every kind returns in every chapter after it is taught (checked for 1–1000).
+  - Chapter bosses: every level 20, 40, 60 … has a golden frame and a 👑 badge. Beating it restores the chapter's stained-glass window (+15 shards).
   - Dailies (glide rules from 2026-10-30) run par 4 on Monday, 5 on Tuesday and Wednesday, 6 on Thursday and Friday, and 7 at the weekend. The weekend dailies (and Friday's) must defeat greedy.
 - Stars (generous): 3 stars when you solve within par + 1 (exactly par when par is 1–2). 2 stars when you solve within par + max(3, ⌈par/2⌉+1). Otherwise 1 star. Solving in exactly par shows "✨ Perfect!". Hints never cost stars, and a hint shows the next best swipe.
 - Next-gift bar: the level-end card shows a 🎁 bar counting down to the next milestone (level 5, then every 10). Each milestone gives +1 hint and a rank step.
@@ -39,6 +54,14 @@ Static site: no build step, no server, no accounts. To host it, publish this fol
   - It is on by default at 18% volume and starts only after the first tap (autoplay rules).
   - Mute it with the ♪ button on the home screen, or use the Music toggle and volume slider in Settings. Music is separate from sound effects (`ps2:prefs.music`, `ps2:prefs.musicVol`).
 - Hints: you start with 3 and can hold at most 5. You earn +1 per milestone and +1 for every three 3-star levels.
+- Rewards (v8): 💠 **shards** are the one currency.
+  - Earned: 2 per new star, 3 for the first perfect solve of a level, 1 per gem, 15 per boss, 5 for each day's first daily solve, 10 per badge, and the daily gift.
+  - Existing players get shards back-dated once: 2 × stars already earned + 15 per boss level already passed.
+  - **Shop**: +1 hint (15), boards Oak 60 / Mint 80 / Rose 80 / Midnight 120, music moods Rain 60 / Music box 90. Classic and Café are free.
+  - **Glass House**: one round stained-glass window per chapter; each level you clear lights a piece (20 per window), and the boss restores it.
+  - **Daily gift**: claim once a day from home; days 1–7 pay 5, 5, 10, 10, 15, 15, 30 (+1 hint). Missing a day starts a fresh week. A dot on the 🎁 shows when it is ready.
+  - **Badges** (12) and **records** (perfect levels, gems, bosses, shards, best gift streak, best perfect run) in Stats.
+  - **Next unlock**: the map bar and the level-end card always say what comes next ("8 levels to Mystery picture" or "5 to the boss · window 15/20").
 - Progress is saved in localStorage under the same `ps2:*` keys as before, so old progress stays valid.
 
 ## Tests (Node 20)
@@ -48,7 +71,8 @@ Static site: no build step, no server, no accounts. To host it, publish this fol
   - it matches the seeded generator;
   - it has exactly one solution;
   - an independent forward search finds par;
-  - the board is at most 5×5.
+  - the board is at most 5×5;
+  - (v8) the mechanic schedule matches, no kind appears before it is taught, teach levels have exactly one kind, at most 2 kinds (3 only on challenge levels after 100), pillars never sit under the answer, frosted panes must move, gems lie on the hint route, and every kind returns in every chapter.
   
   It also prints a per-tier table of par and greedy failures.
 - `node tools/build-levels.js 1000` rebuilds `js/levels.js`.
@@ -56,7 +80,8 @@ Static site: no build step, no server, no accounts. To host it, publish this fol
   - it runs tutorial → daily → map → levels 1, 5, 9, 10, 12, 20 → undo/hint → map bottom;
   - it covers Chromium light, `prefers-color-scheme: dark`, Chrome forced dark, a Dark Reader simulation and Firefox dark (`ONLY=light|dark|darkreader|forcedark|firefox` runs one);
   - `ONLY=sizes` runs at 360×740 and 412×915, plus once with a wide fallback font. It opens home, help, settings, stats, map, levels, the level-end, milestone and daily-end cards, and a coach mark, and fails if any text sticks out of its button, chip or card, or off screen;
-  - it renders a music take and fails if it peaks above −1 dBFS or has a click (a burst of treble far above the frames around it);
+  - (v8) it opens every teach level (12, 18, 25, 33, 42, 52, 64, 78, 95) with its tip, plays boss level 40 to the "window restored" card, and checks the map teaser, Glass House, shop (a real purchase), daily gift (a real claim), and badges. At 360×740 and 412×915 it also checks the new dialogs for overflow;
+  - it renders a music take (Café, Rain and Music box) and fails if it peaks above −1 dBFS or has a click (a burst of treble far above the frames around it);
   - it fails on any console error or if the PLAY bar covers a map node;
   - it needs `python3 -m http.server 8765` running in this folder, and Firefox via `npx playwright-core install firefox`.
 - `node tools/darkreader-check.js` checks two things: that Dark Reader honours the lock, and that the canvas board keeps its colours even when the lock is removed. It needs `npm i --prefix /tmp/dr darkreader@4`.

@@ -275,23 +275,34 @@
     var n = puz.n, P = puz.panes;
     var masks = P.map(function (p) { var out = []; for (var v = 0; v <= p.max; v++) { var lo = 0, hi = 0; paneCells(p, v).forEach(function (c) { var k = c[0] * n + c[1]; if (k < 30) lo |= 1 << k; else hi |= 1 << (k - 30); }); out.push([lo, hi]); } return out; });
     var col = P.map(function (a, i) { return P.map(function (b, j) { return i !== j && (a.axis === b.axis || a.axis === "b" || b.axis === "b"); }); });
-    var g = { masks: masks, col: col };
+    function cm(list) { var m = 0; (list || []).forEach(function (k) { m |= 1 << k; }); return m; } // n <= 5, so every cell fits in the low word
+    var g = { masks: masks, col: col, wall: cm(puz.walls), ice: cm(puz.ice), sand: cm(puz.sand) };
     try { Object.defineProperty(puz, "_g", { value: g, enumerable: false, configurable: true, writable: true }); } catch (e) { puz._g = g; }
     return g;
   }
   function pc32(x) { x = x - ((x >>> 1) & 0x55555555); x = (x & 0x33333333) + ((x >>> 2) & 0x33333333); return (((x + (x >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24; }
-  function gHits(g, i, v, pos) { var m = g.masks[i][v]; for (var j = 0; j < pos.length; j++) { if (!g.col[i][j]) continue; var o = g.masks[j][pos[j]]; if ((m[0] & o[0]) || (m[1] & o[1])) return true; } return false; }
-  function gOver(g, i, v, pos) { var m = g.masks[i][v], c = 0; for (var j = 0; j < pos.length; j++) { if (j === i || g.col[i][j]) continue; var o = g.masks[j][pos[j]]; c += pc32(m[0] & o[0]) + pc32(m[1] & o[1]); } return c; }
+  function gHits(g, i, v, pos) { var m = g.masks[i][v]; if (m[0] & g.wall) return true; for (var j = 0; j < pos.length; j++) { if (!g.col[i][j]) continue; var o = g.masks[j][pos[j]]; if ((m[0] & o[0]) || (m[1] & o[1])) return true; } return false; }
+  function gOver(g, i, v, pos) { var m = g.masks[i][v], c = 0; for (var j = 0; j < pos.length; j++) { if (j === i || g.col[i][j]) continue; var o = g.masks[j][pos[j]]; c += pc32(m[0] & o[0] & ~g.ice) + pc32(m[1] & o[1]); } return c; } // ice cells never make glass stick
   function validState(puz, pos) { var g = gData(puz); for (var i = 0; i < pos.length; i++) if (gHits(g, i, pos[i], pos)) return false; return true; }
   // Where pane i ends up after a swipe in direction d (-1 = left/up, +1 = right/down).
+  // Mechanics: stone pillars (walls) block like the edge; ice cells don't count as new colour;
+  // sand cells stop glass that slides onto them; one-way glass only glides one way.
   function glideTo(puz, pos, i, d) {
     var p = puz.panes[i]; if (p.locked || p.axis === "b") return pos[i];
-    var g = gData(puz), v = pos[i], ov = gOver(g, i, v, pos);
+    if (puz.oneway && puz.oneway[i] && puz.oneway[i] !== d) return pos[i];
+    var g = gData(puz), v = pos[i], ov = gOver(g, i, v, pos), sd = pc32(g.masks[i][v][0] & g.sand);
     for (;;) {
       var w = v + d; if (w < 0 || w > p.max || gHits(g, i, w, pos)) break;
       v = w; var o = gOver(g, i, w, pos); if (o > ov) break; ov = o;
+      var sw = pc32(g.masks[i][w][0] & g.sand); if (sw > sd) break; sd = sw;
     }
     return v;
+  }
+  // Cells pane i passes over (and lands on) when it glides from a to b.
+  function sweptCells(puz, i, a, b) {
+    var out = [], st = b > a ? 1 : -1, n = puz.n;
+    for (var v = a + st; st > 0 ? v <= b : v >= b; v += st) paneCells(puz.panes[i], v).forEach(function (c) { var k = c[0] * n + c[1]; if (out.indexOf(k) < 0) out.push(k); });
+    return out;
   }
   function glideMoves(puz, pos) {
     var out = [];
@@ -403,12 +414,110 @@
     for (var attempt = 0; attempt < (maxAttempts || 3000); attempt++) {
       if (deadline && (attempt & 15) === 0 && Date.now() > deadline) return null;
       var c = glideCandidate(cfg, rng); if (!c) continue;
+      if (cfg.mechs && cfg.mechs.length && !applyMechs(c, cfg, rng)) continue;
       var st = glideStart(c, cfg, rng); if (!st) continue;
+      if (cfg.mechs && cfg.mechs.length && !finishMechs(c, cfg, st.pos, rng)) continue;
       c.start = st.pos; c.par = st.par; c.glide = true; c.attempts = attempt + 1;
       return c;
     }
     return null;
   }
+
+  // ---------- mechanics (v8) ----------
+  function pick(list, k, rng) { list = list.slice(); for (var i = list.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)); var t = list[i]; list[i] = list[j]; list[j] = t; } return list.slice(0, k); }
+  function reach(c, i) { var s = {}, n = c.n; for (var v = 0; v <= c.panes[i].max; v++) paneCells(c.panes[i], v).forEach(function (x) { s[x[0] * n + x[1]] = (s[x[0] * n + x[1]] || 0) + 1; }); return s; }
+  function resetCache(c) { delete c._g; delete c._t; }
+  // Cell and pane mechanics go on after the layout is fixed (so the one-answer rule still holds:
+  // pillars only remove states, ice/sand/one-way only change how glass moves).
+  function applyMechs(c, cfg, rng) {
+    var n = c.n, sol = {}, swept = {}, cross = {};
+    c.panes.forEach(function (p, i) { paneCells(p, c.solution[i]).forEach(function (x) { sol[x[0] * n + x[1]] = 1; }); });
+    c.panes.forEach(function (p, i) { if (p.locked) return; var r = reach(c, i); for (var k in r) { swept[k] = (swept[k] || 0) + 1; if (sol[k]) cross[k] = (cross[k] || 0) + 1; } });
+    var m = cfg.mechs, cells = Object.keys(swept).map(Number);
+    if (m.indexOf("pillar") >= 0) {
+      var free = cells.filter(function (k) { return !sol[k]; }); if (free.length < cfg.walls) return false;
+      c.walls = pick(free, cfg.walls, rng).sort(function (a, b) { return a - b; });
+    }
+    var taken = function (k) { return (c.walls || []).indexOf(k) >= 0 || (c.ice || []).indexOf(k) >= 0; };
+    if (m.indexOf("ice") >= 0) {
+      var ic = Object.keys(cross).map(Number).filter(function (k) { return swept[k] >= 2 && !taken(k); }); if (ic.length < cfg.ice) return false;
+      c.ice = pick(ic, cfg.ice, rng).sort(function (a, b) { return a - b; });
+    }
+    if (m.indexOf("sand") >= 0) {
+      var sc = cells.filter(function (k) { return !taken(k); }); if (sc.length < cfg.sand) return false;
+      c.sand = pick(sc, cfg.sand, rng).sort(function (a, b) { return a - b; });
+    }
+    var mov = c.panes.map(function (p, i) { return i; }).filter(function (i) { return !c.panes[i].locked && c.panes[i].axis !== "b"; });
+    if (m.indexOf("oneway") >= 0) {
+      if (mov.length < 2) return false;
+      c.oneway = {}; pick(mov, cfg.oneway, rng).forEach(function (i) { c.oneway[i] = rng() < 0.5 ? 1 : -1; });
+    }
+    if (m.indexOf("mystery") >= 0) c.mystery = 1;
+    resetCache(c);
+    return validState(c, c.solution);
+  }
+  function stripped(c, key) { var s = { n: c.n, panes: c.panes, solution: c.solution, target: c.target }; ["walls", "ice", "sand", "oneway"].forEach(function (k) { if (k !== key && c[k]) s[k] = c[k]; }); return s; }
+  function optimalPath(c, start) { var pos = start.slice(), out = []; for (var g = 0; g < 40; g++) { var mv = nextMove(c, pos); if (!mv) break; out.push({ pane: mv.pane, dir: mv.dir, from: pos[mv.pane], to: mv.to, pos: pos.slice() }); pos = mv.pos; } return out; }
+  // Every mechanic on a level must matter on the way to the answer, and gems sit on the way.
+  function finishMechs(c, cfg, start, rng) {
+    var path = optimalPath(c, start), keyOf = { pillar: "walls", ice: "ice", sand: "sand", oneway: "oneway" };
+    for (var q = 0; q < cfg.mechs.length; q++) {
+      var key = keyOf[cfg.mechs[q]]; if (!key) continue;
+      var s = stripped(c, key), hit = false;
+      if (key === "oneway") hit = path.some(function (st) { return glideTo(s, st.pos, st.pane, -st.dir) !== st.pos[st.pane] && glideTo(c, st.pos, st.pane, -st.dir) === st.pos[st.pane]; }) || distOf(s, start) < distOf(c, start);
+      else hit = path.some(function (st) { return glideTo(s, st.pos, st.pane, st.dir) !== st.to; });
+      if (!hit) return false;
+    }
+    if (cfg.mechs.indexOf("frost") >= 0) { // frosted glass is always glass you have to move (moving it thaws it)
+      var fm = c.panes.map(function (p, i) { return i; }).filter(function (i) { return !c.panes[i].locked && start[i] !== c.solution[i]; });
+      if (fm.length < cfg.frost) return false; c.frost = pick(fm, cfg.frost, rng).sort();
+    }
+    if (cfg.mechs.indexOf("gem") >= 0) {
+      var under = {}, n = c.n; c.panes.forEach(function (p, i) { paneCells(p, start[i]).forEach(function (x) { under[x[0] * n + x[1]] = 1; }); });
+      var on = {}; path.forEach(function (st) { sweptCells(c, st.pane, st.from, st.to).forEach(function (k) { if (!under[k]) on[k] = 1; }); });
+      var gs = Object.keys(on).map(Number); if (gs.length < cfg.gems) return false;
+      c.gems = pick(gs, cfg.gems, rng).sort(function (a, b) { return a - b; });
+    }
+    return true;
+  }
+
+  // The mechanic journey. Each one is taught alone on its level, comes back in about 60% of the
+  // next 12 levels, then rotates: every 20-level chapter features two older mechanics, every other
+  // mechanic you know returns at least once per chapter, and no level uses more than two
+  // (three only on rare challenge levels after 100).
+  var MECHS = [
+    { key: "locked", at: 12 }, { key: "duo", at: 18 }, { key: "pillar", at: 25 }, { key: "gem", at: 33 },
+    { key: "ice", at: 42 }, { key: "sand", at: 52 }, { key: "oneway", at: 64 }, { key: "frost", at: 78 }, { key: "mystery", at: 95 }
+  ];
+  var MECH_AT = {}; MECHS.forEach(function (m) { MECH_AT[m.key] = m.at; });
+  var RECENT = [1, 3, 4, 6, 8, 10, 12];
+  var chapterPlans = {};
+  function introAt(N) { for (var i = 0; i < MECHS.length; i++) if (MECHS[i].at === N) return MECHS[i].key; return null; }
+  function slotsOf(N) { if (N <= 11 || introAt(N)) return 0; if (isBreather(N)) return 1; return N > 100 && isChallenge(N) && hashStr("ps:three:" + N) % 3 === 0 ? 3 : 2; }
+  function chapterPlan(k) { // k = 0 for levels 1-20
+    if (chapterPlans[k]) return chapterPlans[k];
+    var S = k * 20 + 1, E2 = S + 19, plan = {}, N;
+    for (N = S; N <= E2; N++) plan[N] = introAt(N) ? [introAt(N)] : [];
+    function put(N, m) { if (N < S || N > E2 || N < MECH_AT[m] + 1) return false; var l = plan[N]; if (l.length >= slotsOf(N) || l.indexOf(m) >= 0) return false; if ((m === "frost" && l.indexOf("mystery") >= 0) || (m === "mystery" && l.indexOf("frost") >= 0)) return false; l.push(m); return true; }
+    MECHS.forEach(function (m) { RECENT.forEach(function (o) { put(m.at + o, m.key); }); }); // fresh: most of the next 12 levels
+    var pool = MECHS.filter(function (m) { return m.at < S; }).map(function (m) { return m.key; });
+    var feat = featuredOf(k);
+    var boss = E2; feat.forEach(function (m) { put(boss, m); });
+    feat.forEach(function (m, j) { for (var t = 0; t < 6; t++) { var at = S + ((hashStr("ps:feat:" + k + ":" + m) + t * 3 + j) % 19); for (var z = 0; z < 19 && !put(S + (at - S + z) % 19, m); z++) {} } });
+    pool.forEach(function (m) { if (feat.indexOf(m) >= 0) return; var at = hashStr("ps:call:" + k + ":" + m) % 19; for (var z = 0; z < 19 && !put(S + (at + z) % 19, m); z++) {} }); // callbacks: everything you know, at least once
+    chapterPlans[k] = plan; return plan;
+  }
+  var featMemo = [];
+  function featuredOf(k) { // the two known mechanics featured least recently (fresh ones already come back a lot)
+    if (featMemo[k]) return featMemo[k];
+    var last = {}; for (var j = 0; j < k; j++) featuredOf(j).forEach(function (m) { last[m] = j; });
+    var S = k * 20 + 1, pool = MECHS.filter(function (m) { return m.at < S; });
+    var old = pool.filter(function (m) { return m.at < S - 8; }); if (old.length >= 2) pool = old;
+    pool.sort(function (a, b) { var la = a.key in last ? last[a.key] : -1, lb = b.key in last ? last[b.key] : -1; return la - lb || a.at - b.at; });
+    return (featMemo[k] = pool.slice(0, 2).map(function (m) { return m.key; }));
+  }
+  function mechsFor(N) { return N <= 11 ? [] : chapterPlan(Math.floor((N - 1) / 20))[N].slice(); }
+  function nextIntro(N) { for (var i = 0; i < MECHS.length; i++) if (MECHS[i].at > N) return MECHS[i]; return null; }
 
   // Daily puzzles switch to the glide rules from this date; earlier dates stay as they were.
   var GLIDE_FROM = "2026-10-30";
@@ -465,13 +574,22 @@
     if (par <= 5) { cfg.n = 4; cfg.panes = par <= 4 ? 3 : 3 + ((h >>> 6) & 1); cfg.dup = 1; cfg.mixed = 2; }
     else if (par <= 7) { cfg.n = 5; cfg.panes = 4; cfg.dup = (h >>> 6) % 2 ? 2 : 1; cfg.mixed = 3; }
     else { cfg.n = 5; cfg.panes = par >= 10 ? 5 + ((h >>> 7) & 1) : 5; cfg.dup = 2; cfg.mixed = 4; }
-    if (!br) {
-      var twist = N === TWISTS.locked ? "locked" : N === TWISTS.duo ? "duo" : null;
-      if (!twist && !ch) { var opts = []; for (var tw in TWISTS) if (N > TWISTS[tw]) opts.push(tw); if (opts.length && (h >>> 12) % 4 === 0) twist = opts[(h >>> 16) % opts.length]; }
-      if (twist === "locked") { cfg.locked = true; cfg.panes += 1; cfg.dup = (cfg.dup || 0) + 1; }
-      if (twist === "duo") { var pairs = [["C", "M"], ["C", "Y"], ["M", "Y"]]; cfg.colors = pairs[(h >>> 20) % 3]; cfg.mixed = Math.max(2, cfg.mixed - 1); }
-      cfg.twist = twist || null;
-    }
+    var mechs = mechsFor(N), teach = introAt(N);
+    cfg.boss = N % 20 === 0; if (cfg.boss) cfg.greedy = true;
+    if (teach) { cfg.teach = teach; cfg.par = cfg.lo = cfg.hi = Math.max(3, par - 1); cfg.greedy = "solve"; }
+    cfg.mechs = mechs; cfg.twist = null;
+    var two = mechs.length > 1;
+    mechs.forEach(function (m) {
+      if (m === "locked") { cfg.locked = true; cfg.panes += 1; cfg.dup = Math.min((cfg.dup || 0) + 1, cfg.panes - 3); cfg.twist = cfg.twist || "locked"; }
+      if (m === "duo") { var pairs = [["C", "M"], ["C", "Y"], ["M", "Y"]]; cfg.colors = pairs[(h >>> 20) % 3]; cfg.mixed = Math.max(2, cfg.mixed - 1); cfg.twist = "duo"; }
+      if (m === "pillar") cfg.walls = teach || two || cfg.n < 5 ? 1 : 1 + ((h >>> 9) & 1);
+      if (m === "ice") cfg.ice = teach ? 2 : 2 + ((h >>> 10) & 1);
+      if (m === "sand") cfg.sand = 1 + (teach || two ? 0 : (h >>> 11) & 1);
+      if (m === "gem") cfg.gems = 3;
+      if (m === "oneway") cfg.oneway = 1;
+      if (m === "frost") cfg.frost = teach || two || cfg.panes < 4 ? 1 : 2;
+    });
+    if (mechs.indexOf("locked") >= 0 && mechs.length > 1 && cfg.panes > 5) cfg.panes = 5; // keep the board readable
     return cfg;
   }
   // Level N is always the same puzzle (seeded, deterministic). If a seed is stubborn it tries more
@@ -482,16 +600,20 @@
     for (var s = 0; !lv && s < 4; s++) { lv = buildGlide(cfg, seed + (s ? ":s" + s : ""), deadline, 2500); if (deadline && Date.now() > deadline) break; }
     if (!lv) { var c2 = {}; for (var x in cfg) c2[x] = cfg[x]; c2.lo = Math.max(1, cfg.par - 1); c2.hi = cfg.par + 1; c2.shapes = FLAVOURS.mix; if (cfg.n === 5 && cfg.par >= 7) c2.panes = Math.max(cfg.panes, 5); lv = buildGlide(c2, seed + ":w", 0, 5000); if (lv) lv.fallback = 1; }
     if (!lv) { var c3 = {}; for (var y in cfg) c3[y] = cfg[y]; c3.lo = 3; c3.hi = cfg.par; c3.greedy = false; c3.panes = Math.max(3, cfg.panes - 1); lv = buildGlide(c3, seed + ":f", 0, 6000); if (lv) lv.fallback = 2; }
+    if (!lv) { var c4 = {}; for (var z in cfg) c4[z] = cfg[z]; c4.lo = 3; c4.hi = cfg.par; c4.greedy = false; c4.shapes = FLAVOURS.mix; c4.panes = Math.max(3, cfg.panes - 1); c4.dup = Math.max(0, Math.min(cfg.dup || 0, c4.panes - 3)); c4.mixed = Math.max(2, cfg.mixed - 1); lv = buildGlide(c4, seed + ":g", 0, 8000); if (lv) lv.fallback = 3; }
     if (!lv) throw new Error("Could not generate level " + N);
     lv.level = N; lv.breather = cfg.breather; lv.challenge = cfg.challenge; lv.twist = cfg.twist || null; lv.flavour = cfg.flavour;
+    lv.mechs = cfg.mechs || []; lv.teach = cfg.teach || null; lv.boss = !!cfg.boss;
     return lv;
   }
   // Compact storage for the precomputed level file. Item 7 = par, item 8 = 1 for glide rules.
-  function packLevel(l) { return [l.n, l.panes.map(function (p) { var q = [p.color, p.cells, p.axis, p.base, p.max]; if (p.axis === "b") q.push(p.mc); if (p.locked) q[5] = q[5] == null ? -1 : q[5], q.push(1); return q; }), l.solution, l.start, (l.breather ? 1 : 0) | (l.challenge ? 2 : 0), l.twist || 0, l.flavour, l.par || 0, l.glide ? 1 : 0]; }
+  function packLevel(l) { return [l.n, l.panes.map(function (p) { var q = [p.color, p.cells, p.axis, p.base, p.max]; if (p.axis === "b") q.push(p.mc); if (p.locked) q[5] = q[5] == null ? -1 : q[5], q.push(1); return q; }), l.solution, l.start, (l.breather ? 1 : 0) | (l.challenge ? 2 : 0), l.twist || 0, l.flavour, l.par || 0, l.glide ? 1 : 0, packExtra(l)]; }
+  function packExtra(l) { var x = {}; ["walls", "ice", "sand", "gems", "frost"].forEach(function (k) { if (l[k] && l[k].length) x[k] = l[k]; }); if (l.oneway) x.oneway = l.oneway; if (l.mystery) x.mystery = 1; if (l.boss) x.boss = 1; if (l.teach) x.teach = l.teach; if (l.mechs && l.mechs.length) x.mechs = l.mechs; return x; }
   function unpackLevel(a, N) {
     var puz = { n: a[0], level: N, solution: a[2], start: a[3], breather: !!(a[4] & 1), challenge: !!(a[4] & 2), twist: a[5] || null, flavour: a[6],
       panes: a[1].map(function (q) { var dm = dims(q[1]), p = { color: q[0], cells: q[1], axis: q[2], base: q[3], max: q[4], h: dm[0], w: dm[1] }; if (q[2] === "b") p.mc = q[5]; if (q[6] === 1) p.locked = true; return p; }) };
     if (a[8]) { puz.glide = true; puz.par = a[7]; }
+    var x = a[9] || {}; for (var k in x) puz[k] = x[k]; puz.mechs = puz.mechs || []; puz.boss = !!puz.boss;
     puz.target = render(puz, puz.solution);
     return puz;
   }
@@ -501,7 +623,8 @@
     generate: generate, tutorial: tutorial, allVisible: allVisible, solve: solve, render: render, rowFeedback: rowFeedback,
     paneCells: paneCells, diffCount: diffCount, curveS: curveS, movable: movable, TWISTS: TWISTS, isChallenge: isChallenge, levelConfig: levelConfig, generateLevel: generateLevel,
     effOf: effOf, grabOrder: grabOrder, GLIDE_FROM: GLIDE_FROM, glideTo: glideTo, glideMoves: glideMoves, validState: validState, distOf: distOf, nextMove: nextMove,
-    greedySolves: greedySolves, glideSolutions: glideSolutions, buildGlide: buildGlide, parOf: function (p) { return p.par || movable(p); }, packLevel: packLevel, unpackLevel: unpackLevel, isBreather: isBreather, isAha: isAha, puzzleNumber: puzzleNumber, addDays: addDays, parseDate: parseDate
+    greedySolves: greedySolves, glideSolutions: glideSolutions, buildGlide: buildGlide, parOf: function (p) { return p.par || movable(p); }, packLevel: packLevel, unpackLevel: unpackLevel, isBreather: isBreather, isAha: isAha, puzzleNumber: puzzleNumber, addDays: addDays, parseDate: parseDate,
+    MECHS: MECHS, mechsFor: mechsFor, introAt: introAt, nextIntro: nextIntro, sweptCells: sweptCells, optimalPath: optimalPath
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.PaneEngine = api;
