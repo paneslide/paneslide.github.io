@@ -93,7 +93,7 @@
     var t = document.createElement("div"); t.className = "ps-toast"; t.setAttribute("role", "status");
     var sp = document.createElement("span"); sp.textContent = text; t.appendChild(sp);
     var b = document.createElement("button"); b.type = "button"; b.textContent = btnText; b.addEventListener("click", function () { onBtn(); t.remove(); }); t.appendChild(b);
-    var x = document.createElement("button"); x.type = "button"; x.className = "x"; x.setAttribute("aria-label", "Not now"); x.textContent = "✕"; x.addEventListener("click", function () { t.remove(); }); t.appendChild(x);
+    var x = document.createElement("button"); x.type = "button"; x.className = "ps-x"; x.setAttribute("aria-label", "Not now"); x.textContent = "✕"; x.addEventListener("click", function () { t.remove(); }); t.appendChild(x);
     document.body.appendChild(t); return t;
   }
 
@@ -102,8 +102,8 @@
   // Pages are fetched network-first, so an online visitor never gets an old page.
   function setupSW() {
     if (!("serviceWorker" in navigator) || /[?&]test=1/.test(location.search) && !/[?&]sw=1/.test(location.search)) return;
-    var reloading = false;
-    navigator.serviceWorker.addEventListener("controllerchange", function () { if (reloading) return; reloading = true; location.reload(); });
+    var reloading = false, hadController = !!navigator.serviceWorker.controller; // first install claims the page: no reload (avoids a double page view)
+    navigator.serviceWorker.addEventListener("controllerchange", function () { if (reloading || !hadController) return; reloading = true; location.reload(); });
     navigator.serviceWorker.register("/sw.js").then(function (reg) {
       function ask(w) {
         if (!w || !navigator.serviceWorker.controller) return; // first install: nothing to replace
