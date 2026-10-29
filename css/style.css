@@ -537,3 +537,13 @@ body[data-view="home"] #chipStars { display: none; }
   .hud .chip .ico { width: 20px; height: 20px; }
   body[data-view="map"] #chipShards { display: none; } /* shards stay on the home screen and in the shop */
 }
+/* v9: progress code + install in Settings */
+.set-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.cbtn.wide { flex: 1 1 140px; min-height: 48px; border-radius: 18px; font-size: 16px; font-weight: 700; padding: 8px 12px; text-shadow: 0 1px 0 rgba(0,0,0,.2); }
+#dlgSave .cbtn.wide { width: 100%; margin: 8px 0 4px; }
+.set-links { margin: 12px 0 0; text-align: center; font-size: 14px; font-weight: 500; color: var(--muted); }
+.set-links a { color: #5B23B0; }
+.save-tip { margin: 4px 0 10px; font-size: 15px; font-weight: 500; line-height: 1.45; }
+.save-lb { display: block; font-size: 14px; font-weight: 600; margin-top: 10px; color: #5E5285; }
+.save-box { width: 100%; font: 500 12.5px/1.35 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); background: var(--panel2); border: 2px solid var(--pshadow); border-radius: 14px; padding: 8px 10px; resize: none; word-break: break-all; user-select: text; -webkit-user-select: text; }
+.save-msg { min-height: 1.2em; margin: 6px 0 0; font-size: 14px; color: #B3204D; text-align: center; }

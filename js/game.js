@@ -27,6 +27,7 @@
   // ---------- state ----------
   var today = localDate();
   var date = /^\d{4}-\d{2}-\d{2}$/.test(qs.get("date") || "") ? qs.get("date") : today;
+  if (date > today || date < E.EPOCH) date = today; // the archive can open past days only; future days stay locked
   var practice = date !== today;
   var prefs = load("ps2:prefs", { sound: true, patterns: false, tutDone: false, mixSeen: [] });
   if (prefs.music === undefined) prefs.music = true; // soft background music, on by default at a low volume
@@ -146,6 +147,7 @@
   function levelUI(on) { if (!on) { var gc = $("gemCt"); if (gc) gc.hidden = true; } $("btnHint").hidden = !on; $("btnRestart").hidden = !on; $("starLine").hidden = false; $("btnUndo").hidden = !(puz && puz.glide && mode !== "tutorial"); }
   function startHome() {
     hideCoach(true); clearHint(); mode = "home"; locked = true; applyTheme(null);
+    if (practice) { date = today; practice = false; try { history.replaceState(null, "", location.pathname); } catch (e) {} } // leaving an archive day: DAILY means today again
     var lv = $("playLv"); lv.textContent = "Level " + prog.unlocked;
     var d = new Date(); $("calMon").textContent = d.toLocaleString("en", { month: "short" }).toUpperCase(); $("calDay").textContent = d.getDate();
     var st = load("ps2:game:" + today, null), ds = $("dailyStat");
@@ -181,7 +183,7 @@
   }
   function ensureLevels(cb) {
     if (window.PANESLIDE_LEVELS) return cb();
-    var sc = document.createElement("script"); sc.src = "js/levels.js?v=8"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+    var sc = document.createElement("script"); sc.src = "js/levels.js?v=9"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
   }
   function getLevel(N) {
     var D = window.PANESLIDE_LEVELS;
@@ -1415,6 +1417,36 @@
     $("dlgHelp").showModal();
   }
   function openSettings() { $("optMusic").checked = !!prefs.music; $("optMusicVol").value = Math.round(prefs.musicVol * 100); $("musicVolTxt").textContent = Math.round(prefs.musicVol * 100) + "%"; $("optSound").checked = !!prefs.sound; $("optVibe").checked = !!prefs.vibe; $("optPatterns").checked = !!prefs.patterns; syncToggles(); $("dlgSettings").showModal(); }
+  // ---------- progress code (v9): move progress to another browser or device, no account ----------
+  function progressCode() {
+    var data = {}; for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf("ps2:") === 0) data[k] = localStorage.getItem(k); }
+    var json = JSON.stringify({ app: "paneslide", v: 1, at: localDate(), data: data });
+    return "PS1." + btoa(unescape(encodeURIComponent(json)));
+  }
+  function readCode(code) {
+    code = String(code || "").replace(/\s+/g, ""); if (code.indexOf("PS1.") !== 0) return null;
+    try { var o = JSON.parse(decodeURIComponent(escape(atob(code.slice(4))))); } catch (e) { return null; }
+    if (!o || o.app !== "paneslide" || typeof o.data !== "object") return null;
+    var keys = Object.keys(o.data); if (!keys.length || keys.some(function (k) { return k.indexOf("ps2:") !== 0 || typeof o.data[k] !== "string"; })) return null;
+    try { keys.forEach(function (k) { JSON.parse(o.data[k]); }); } catch (e) { return null; }
+    return o;
+  }
+  function openSave() {
+    $("saveCode").value = progressCode(); $("loadCode").value = ""; $("loadMsg").textContent = ""; $("dlgSettings").close(); $("dlgSave").showModal();
+  }
+  function copySave() {
+    var t = $("saveCode"), v = t.value, ok = function () { toast("📋 Code copied"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(ok, function () { t.select(); try { document.execCommand("copy"); ok(); } catch (e) {} });
+    else { t.select(); try { document.execCommand("copy"); ok(); } catch (e) {} }
+  }
+  function loadSave() {
+    var o = readCode($("loadCode").value), msg = $("loadMsg");
+    if (!o) { msg.textContent = "That code doesn't look right. Copy the whole code and try again."; return; }
+    if (!confirm("Replace the progress on this device with the code from " + (o.at || "another device") + "?")) return;
+    Object.keys(localStorage).filter(function (k) { return k.indexOf("ps2:") === 0; }).forEach(function (k) { localStorage.removeItem(k); });
+    Object.keys(o.data).forEach(function (k) { localStorage.setItem(k, o.data[k]); });
+    msg.textContent = "Loaded! Restarting…"; setTimeout(function () { location.replace(location.pathname); }, 600);
+  }
   function syncToggles() { document.querySelectorAll(".tgl").forEach(function (l) { l.classList.toggle("on", l.querySelector("input").checked); }); }
   function wire() {
     var b = $("board");
@@ -1428,6 +1460,7 @@
     $("btnReplayTut").addEventListener("click", function () { $("dlgHelp").close(); startTutorial(); });
     $("btnStats").addEventListener("click", function () { $("statsBody").innerHTML = statsHTML(-1); $("dlgStats").showModal(); });
     $("btnSettings").addEventListener("click", openSettings); $("btnHomeSettings").addEventListener("click", openSettings);
+    $("btnSaveCode").addEventListener("click", openSave); $("btnCopyCode").addEventListener("click", copySave); $("btnLoadCode").addEventListener("click", loadSave);
     $("optSound").addEventListener("change", function () { prefs.sound = this.checked; save("ps2:prefs", prefs); syncToggles(); if (prefs.sound) sfx.drop(); });
     $("optMusic").addEventListener("change", function () { setMusic(this.checked); });
     $("optMusicVol").addEventListener("input", function () { prefs.musicVol = this.value / 100; $("musicVolTxt").textContent = this.value + "%"; music.vol(); save("ps2:prefs", prefs); if (this.value > 0 && !prefs.music) setMusic(true); });
@@ -1474,7 +1507,7 @@
 
   if (TEST) window.PS = {
     get puzzle() { return puz; }, get state() { return state; }, get mode() { return mode; }, shareText: shareText, mileShareText: function () { var N = puz.level, ri = rankIndex(N); return mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark"); },
-    get progress() { return prog; }, hint: useHint, openHouse: openHouse, openShop: openShop, openGift: openGift, claimGift: claimGift, teaser: function (N) { return teaserHTML(N); }, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; }, get music() { return { on: prefs.music, vol: prefs.musicVol, playing: music.playing }; }, musicCheck: function () { return music.check(); }, get markShown() { return markEl ? markEl.dataset.key : null; },
+    get progress() { return prog; }, progressCode: progressCode, readCode: readCode, get date() { return date; }, get practice() { return practice; }, hint: useHint, openHouse: openHouse, openShop: openShop, openGift: openGift, claimGift: claimGift, teaser: function (N) { return teaserHTML(N); }, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; }, get music() { return { on: prefs.music, vol: prefs.musicVol, playing: music.playing }; }, musicCheck: function () { return music.check(); }, get markShown() { return markEl ? markEl.dataset.key : null; },
     grabPoint: function (pi) { // centre of a cell of pane pi that no other same-axis pane covers
       var p = puz.panes[pi], r = boardEl.getBoundingClientRect(), cells = E.paneCells(p, state.pos[pi]);
       var only = cells.filter(function (c) { return panesAt(c).every(function (q) { return q === pi || puz.panes[q].locked; }); });

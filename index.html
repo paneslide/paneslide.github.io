@@ -3,14 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--site-head-->
 <meta name="color-scheme" content="only light">
 <meta name="darkreader-lock">
 <meta name="theme-color" content="#3B1F7A">
 <title>PaneSlide · slide the glass, copy the picture</title>
 <meta name="description" content="PaneSlide is a free colour-glass sliding puzzle game. Slide glass panes so the window matches the picture. Where glass overlaps, colours mix. A new daily puzzle plus endless levels.">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://paneslide.github.io/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PaneSlide">
+<meta property="og:title" content="PaneSlide · slide the glass, copy the picture">
+<meta property="og:description" content="PaneSlide is a free colour-glass sliding puzzle game. Slide glass panes so the window matches the picture. Where glass overlaps, colours mix. A new daily puzzle plus endless levels.">
+<meta property="og:url" content="https://paneslide.github.io/">
+<meta property="og:image" content="https://paneslide.github.io/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="PaneSlide: coloured glass panes sliding on a board">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="PaneSlide · slide the glass, copy the picture">
+<meta name="twitter:description" content="PaneSlide is a free colour-glass sliding puzzle game. Slide glass panes so the window matches the picture. Where glass overlaps, colours mix. A new daily puzzle plus endless levels.">
+<meta name="twitter:image" content="https://paneslide.github.io/img/og.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<script type="application/ld+json">[{"@context":"https://schema.org","@type":"WebSite","name":"PaneSlide","url":"https://paneslide.github.io/","inLanguage":"en","publisher":{"@type":"Organization","name":"PaneSlide","url":"https://paneslide.github.io/","logo":{"@type":"ImageObject","url":"https://paneslide.github.io/icons/icon-512.png","width":512,"height":512}}},{"@context":"https://schema.org","@type":"VideoGame","name":"PaneSlide","url":"https://paneslide.github.io/","description":"A free colour-glass sliding puzzle for the web browser. Slide glass panes so the window matches the picture; where glass overlaps, colours mix. A new daily puzzle plus endless levels.","genre":["Puzzle"],"gamePlatform":"Web browser","applicationCategory":"Game","operatingSystem":"Any","playMode":"SinglePlayer","inLanguage":"en","isAccessibleForFree":true,"image":"https://paneslide.github.io/img/og.png","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"PaneSlide","url":"https://paneslide.github.io/","logo":{"@type":"ImageObject","url":"https://paneslide.github.io/icons/icon-512.png","width":512,"height":512}}}]</script>
+<link rel="stylesheet" href="css/site.css?v=9">
+<!--/site-head-->
 <link rel="preload" href="fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=9">
 </head>
 <body>
 <div class="scene" id="scene" aria-hidden="true">
@@ -79,6 +100,20 @@
   <button id="btnToMap" hidden></button>
  </div>
 </main>
+<!--site-intro-->
+<div class="home-site">
+ <section class="s-card" aria-labelledby="aboutGame">
+  <h2 id="aboutGame">A calm colour puzzle, new every day</h2>
+  <p>PaneSlide is a free sliding puzzle made of coloured glass. Swipe the panes along their rails until the board matches the small picture. Cyan, magenta and yellow glass mix where they overlap, just like real colour filters, so blue, green, red and black only appear where panes cross.</p>
+  <p>There is one new <a class="s-link" href="/?mode=daily">daily puzzle</a> for everyone, an <a class="s-link" href="/archive/">archive</a> of past days, and endless levels that teach nine kinds of special glass one at a time. New here? Read <a class="s-link" href="/how-to-play/">how to play</a> or browse the <a class="s-link" href="/guides/">guides</a>.</p>
+ </section>
+ <div class="ad-slot" data-slot="game" hidden></div>
+ <footer class="s-foot"><nav aria-label="Footer"><a href="/">Play</a><a href="/?mode=daily">Daily puzzle</a><a href="/archive/">Archive</a><a href="/guides/">Guides</a><a href="/how-to-play/">How to play</a><a href="/about/">About</a><a href="/privacy/">Privacy Policy</a><a href="/terms/">Terms of Use</a><a href="/contact/">Contact</a></nav>
+<p>PaneSlide is a free colour-glass sliding puzzle. No sign-up, no downloads; your progress stays on your device.</p>
+<p>© 2026 PaneSlide · <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#112;&#97;&#110;&#101;&#115;&#108;&#105;&#100;&#101;&#46;&#103;&#97;&#109;&#101;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#112;&#97;&#110;&#101;&#115;&#108;&#105;&#100;&#101;&#46;&#103;&#97;&#109;&#101;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;</a></p>
+<button type="button" class="s-btn purple" data-install hidden>📲 Install the app</button></footer>
+</div>
+<!--/site-intro-->
 
 <canvas id="confetti" aria-hidden="true"></canvas>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -167,6 +202,24 @@
     <label class="tgl"><input type="checkbox" id="optPatterns"><span class="tg-ic pat"><i></i><i></i><i></i></span><span class="tg-lb">Patterns</span></label>
   </div>
   <label class="vol" for="optMusicVol"><span class="vi">🎵</span><span class="vl">Music volume</span><input type="range" id="optMusicVol" min="0" max="100" step="1" value="18"><b id="musicVolTxt">18%</b></label>
+  <div class="set-row">
+    <button class="cbtn wide purple" id="btnSaveCode"><span class="lbl">💾 Progress code</span></button>
+    <button class="cbtn wide blue" data-install hidden><span class="lbl">📲 Install app</span></button>
+  </div>
+  <p class="set-links"><a href="/how-to-play/">How to play</a> · <a href="/guides/">Guides</a> · <a href="/privacy/">Privacy</a></p>
+</dialog>
+
+<dialog id="dlgSave" class="panel">
+  <div class="ribbon purple">Progress code</div>
+  <button class="cbtn round red x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  <p class="save-tip">Your progress lives only in this browser. Copy this code and keep it somewhere safe, or paste it on another phone or computer to carry on there.</p>
+  <label class="save-lb" for="saveCode">Your code</label>
+  <textarea id="saveCode" class="save-box" rows="3" readonly></textarea>
+  <button class="cbtn wide green" id="btnCopyCode"><span class="lbl">📋 Copy code</span></button>
+  <label class="save-lb" for="loadCode">Load a code</label>
+  <textarea id="loadCode" class="save-box" rows="2" placeholder="Paste a PS1.… code here"></textarea>
+  <button class="cbtn wide gold" id="btnLoadCode"><span class="lbl">⬇️ Load code</span></button>
+  <p class="save-msg" id="loadMsg" role="status"></p>
 </dialog>
 
 <dialog id="dlgHouse" class="panel">
@@ -195,7 +248,9 @@
   <div class="gift-next" id="giftNext" hidden></div>
 </dialog>
 
-<script src="js/engine.js?v=8"></script>
-<script src="js/game.js?v=8"></script>
+<!--site-js--><script src="site.config.js?v=9"></script>
+<script src="js/site.js?v=9" defer></script><!--/site-js-->
+<script src="js/engine.js?v=9"></script>
+<script src="js/game.js?v=9"></script>
 </body>
 </html>

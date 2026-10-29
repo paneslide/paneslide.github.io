@@ -1,0 +1,107 @@
+/* PaneSlide website pages (guides, archive, about, policies). Same palette and rounded cards as the game. */
+@font-face { font-family: "Fredoka"; font-style: normal; font-weight: 500 700; font-display: swap; src: url(/fonts/fredoka-latin.woff2) format("woff2"); }
+[hidden] { display: none !important; }
+:root { color-scheme: only light; --ink: #2A1B4D; --muted: #5E5285; --panel: #FFFFFF; --panel2: #F3EEFF; --pshadow: #CFC3F0; --link: #5B23B0;
+  --C: #3CC8F0; --M: #F0509A; --Y: #FFD84A; --green: #2F9E44; --sky1: #2B1466; --sky2: #6A2FB8; --sky3: #E86FB0; }
+html.site, html.site body { forced-color-adjust: none; }
+.site * { box-sizing: border-box; }
+body.site { margin: 0; color: var(--ink); background: #2B1466 linear-gradient(180deg, var(--sky1) 0, var(--sky2) 340px, #8B4FC8 640px, #F3EEFF 1100px) no-repeat;
+  font: 400 17.5px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; -webkit-text-size-adjust: 100%; }
+.site h1, .site h2, .site h3, .s-brand, .s-nav a, .s-btn, .s-kicker, .s-foot h2 { font-family: "Fredoka", ui-rounded, system-ui, sans-serif; }
+.s-skip { position: absolute; left: -999px; top: 8px; background: #fff; color: var(--ink); padding: 8px 14px; border-radius: 12px; z-index: 50; }
+.s-skip:focus { left: 8px; }
+.s-head { max-width: 980px; margin: 0 auto; padding: max(12px, env(safe-area-inset-top)) 14px 6px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; }
+.s-brand { display: inline-flex; align-items: center; gap: 9px; color: #fff; text-decoration: none; font-weight: 700; font-size: 24px; letter-spacing: .2px; }
+.s-brand span { color: #FFD84A; }
+.s-brand svg { width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 3px 0 rgba(0,0,0,.25); }
+.s-nav { display: flex; flex-wrap: wrap; gap: 6px; }
+.s-nav a { color: #fff; text-decoration: none; font-weight: 600; font-size: 15.5px; padding: 7px 13px; border-radius: 999px; background: rgba(255,255,255,.14); border: 1.5px solid rgba(255,255,255,.28); }
+.s-nav a:hover, .s-nav a:focus-visible { background: rgba(255,255,255,.26); }
+.s-nav a[aria-current] { background: #fff; color: var(--ink); }
+.s-nav a.play { background: #22862F; border-color: #1B6E27; box-shadow: 0 3px 0 #145220; }
+.s-main { max-width: 980px; margin: 0 auto; padding: 8px 14px 30px; }
+.s-hero { color: #fff; text-align: center; padding: 18px 6px 22px; }
+.s-hero h1 { font-size: clamp(30px, 7vw, 46px); line-height: 1.1; margin: 0 0 10px; font-weight: 700; text-shadow: 0 3px 0 rgba(0,0,0,.22); }
+.s-hero p { margin: 0 auto; max-width: 640px; font-size: 18px; color: #F1E9FF; }
+.s-kicker { display: inline-block; font-weight: 600; font-size: 14px; letter-spacing: .6px; text-transform: uppercase; color: #FFE7A6; margin-bottom: 6px; }
+.s-card { background: var(--panel); border-radius: 24px; box-shadow: 0 6px 0 var(--pshadow), 0 14px 30px rgba(43,20,102,.18); padding: clamp(18px, 4.5vw, 38px); margin: 0 auto 22px; }
+.s-prose { max-width: 740px; }
+.s-prose h2 { font-size: 26px; line-height: 1.25; margin: 34px 0 10px; font-weight: 700; }
+.s-prose h3 { font-size: 20px; margin: 24px 0 6px; font-weight: 600; }
+.s-prose h2:first-child { margin-top: 0; }
+.s-prose p, .s-prose ul, .s-prose ol { margin: 0 0 15px; }
+.s-prose li { margin: 4px 0; }
+.s-prose a:not(.s-cardlink):not(.s-btn), .s-foot a, .s-link { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+.s-prose a.s-cardlink { color: var(--ink); text-decoration: none; }
+.s-prose strong { font-weight: 700; }
+.s-prose code { background: var(--panel2); padding: 1px 6px; border-radius: 6px; font-size: .92em; }
+.s-meta { color: var(--muted); font-size: 15px; margin: -4px 0 18px; }
+.s-tip { background: #FFF6D6; border: 2px solid #FFD84A; border-radius: 18px; padding: 12px 16px; margin: 18px 0; }
+.s-tip p:last-child { margin-bottom: 0; }
+.s-note { background: var(--panel2); border-radius: 18px; padding: 12px 16px; margin: 18px 0; }
+.s-fig { margin: 22px 0; text-align: center; }
+.s-fig svg, .s-fig img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.s-fig img { border-radius: 18px; box-shadow: 0 4px 0 var(--pshadow); }
+.s-fig figcaption { color: var(--muted); font-size: 15px; margin-top: 8px; }
+.s-figrow { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; align-items: flex-start; }
+.s-figrow > div { flex: 1 1 200px; max-width: 280px; }
+.s-figrow small { display: block; color: var(--muted); font-size: 14px; margin-top: 4px; }
+.s-btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-weight: 700; font-size: 18px; color: #fff; background: #22862F; border: 0; border-radius: 999px; padding: 11px 24px; box-shadow: 0 4px 0 #1F6B2A; cursor: pointer; }
+.s-btn.blue { background: #1F6FD6; box-shadow: 0 4px 0 #1A4F99; }
+.s-btn.purple { background: #6A46EA; box-shadow: 0 4px 0 #3F24A8; }
+.s-btn.white { background: #fff; color: var(--ink); box-shadow: 0 4px 0 var(--pshadow); }
+.s-btn:focus-visible, .s-nav a:focus-visible, .s-cardlink:focus-visible { outline: 3px solid #FFD84A; outline-offset: 2px; }
+.s-cta { text-align: center; margin: 26px 0 6px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.s-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.s-cardlink { display: block; text-decoration: none; color: var(--ink); background: #fff; border-radius: 22px; padding: 18px 18px 16px; box-shadow: 0 5px 0 var(--pshadow), 0 10px 22px rgba(43,20,102,.12); }
+.s-cardlink:hover { transform: translateY(-2px); }
+.s-cardlink h2, .s-cardlink h3 { font-size: 19.5px; line-height: 1.25; margin: 8px 0 6px; font-weight: 600; }
+.s-cardlink p { margin: 0; color: var(--muted); font-size: 15.5px; line-height: 1.5; }
+.s-cardlink .ic { font-size: 26px; line-height: 1; }
+.s-crumbs { font-size: 14.5px; color: #F1E9FF; margin: 0 0 4px; }
+.s-crumbs a { color: #fff; }
+.s-toc { background: var(--panel2); border-radius: 18px; padding: 12px 18px; margin: 0 0 22px; }
+.s-toc b { font-family: "Fredoka", system-ui, sans-serif; font-weight: 600; }
+.s-toc ol { margin: 6px 0 0; padding-left: 22px; }
+.s-related { margin-top: 30px; }
+.s-related h2 { font-size: 22px; }
+/* Reserved ad space: only shown when ADS_ENABLED is true in site.config.js. Never near game controls. */
+.ad-slot { display: block; margin: 28px auto; max-width: 740px; min-height: 120px; text-align: center; }
+.ad-slot::before { content: "Advertisement"; display: block; font: 500 12px/1.4 system-ui, sans-serif; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 4px; }
+.s-foot { max-width: 980px; margin: 10px auto 0; padding: 22px 16px max(26px, env(safe-area-inset-bottom)); color: var(--ink); text-align: center; font-size: 15.5px; }
+.s-foot nav { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center; margin: 0 0 10px; }
+.s-foot nav a { font-weight: 600; }
+.s-foot p { margin: 6px 0; color: var(--muted); }
+.s-foot .s-btn { font-size: 15px; padding: 8px 18px; margin-top: 8px; }
+.s-table { width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 16px; }
+.s-table th, .s-table td { text-align: left; padding: 8px 10px; border-bottom: 1.5px solid #E6DEFA; vertical-align: top; }
+.s-table th { font-family: "Fredoka", system-ui, sans-serif; font-weight: 600; background: var(--panel2); }
+.s-tablewrap { overflow-x: auto; }
+/* archive */
+.arc-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-size: 15px; margin: 0 0 16px; }
+.arc-month { margin: 0 0 24px; }
+.arc-month h2 { font-size: 22px; margin: 0 0 10px; }
+.arc-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.arc-dow { text-align: center; font: 600 13px/1.2 "Fredoka", system-ui, sans-serif; color: var(--muted); }
+.arc-day { display: flex; flex-direction: column; align-items: center; justify-content: center; aspect-ratio: 1; min-height: 40px; border-radius: 14px; text-decoration: none; font: 600 16px/1 "Fredoka", system-ui, sans-serif; color: var(--ink); background: var(--panel2); border: 2px solid transparent; }
+.arc-day small { font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 3px; }
+.arc-day.won { background: #DFF6E3; border-color: #7ED957; }
+.arc-day.won small { color: #23722F; }
+.arc-day.today { border-color: #6A46EA; }
+.arc-day.off { background: transparent; color: #8E85AA; border: 2px dashed #E0D8F5; cursor: default; }
+a.arc-day:hover { background: #E8DEFF; }
+/* update + install prompts (all pages, including the game) */
+.ps-toast { position: fixed; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 1000; display: flex; align-items: center; gap: 10px; background: #fff; color: #2A1B4D; border-radius: 999px; padding: 8px 8px 8px 16px; box-shadow: 0 5px 0 #CFC3F0, 0 12px 28px rgba(43,20,102,.3); font: 600 15px/1.3 "Fredoka", system-ui, sans-serif; max-width: calc(100vw - 20px); }
+.ps-toast button { font: 700 15px/1 "Fredoka", system-ui, sans-serif; border: 0; border-radius: 999px; padding: 9px 14px; background: #22862F; color: #fff; box-shadow: 0 3px 0 #1F6B2A; cursor: pointer; white-space: nowrap; }
+.ps-toast button.x { background: #F3EEFF; color: #2A1B4D; box-shadow: none; padding: 9px 11px; }
+/* game home page: intro + footer below the play buttons (hidden while playing) */
+.home-site { width: 100%; max-width: 760px; padding: 0 14px; user-select: text; -webkit-user-select: text; font: 400 16.5px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #2A1B4D; }
+body:not([data-view="home"]) .home-site { display: none; }
+.home-site .s-card { padding: 22px 22px 18px; }
+.home-site h2 { font: 700 24px/1.2 "Fredoka", system-ui, sans-serif; margin: 0 0 8px; }
+.home-site p { margin: 0 0 12px; }
+.home-site .s-foot { color: #fff; }
+.home-site .s-foot a { color: #fff; }
+.home-site .s-foot p { color: #F1E9FF; }
+@media (max-width: 420px) { body.site { font-size: 17px; } .s-nav a { font-size: 14.5px; padding: 6px 10px; } .s-brand { font-size: 22px; } .s-prose h2 { font-size: 23px; } }
+@media (prefers-reduced-motion: reduce) { .s-cardlink:hover { transform: none; } }

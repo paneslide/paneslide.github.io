@@ -9,7 +9,42 @@ A free daily puzzle. **Swipe the glass to copy the picture. Where glass overlaps
 - First-time players get a 20-second 3×3 tutorial. Players from before v3 see it once more for the new rules. Press "?" any time for help.
 - The share result is spoiler-free: one coloured square per move.
 
-Static site: no build step, no server, no accounts. To host it, publish this folder on GitHub Pages.
+Static site: no server, no accounts. To host it, publish this folder on GitHub Pages. The game itself has no build step; the website pages (guides, privacy and so on) are generated once by `node tools/build-site.js` and committed, so GitHub Pages just serves files.
+
+## Website layer (v9, AdSense-ready)
+
+Pages (all generated from Markdown in `content/` by `node tools/build-site.js --check`, which also checks guide word counts of 600–1200):
+
+| URL | What |
+|---|---|
+| `/` | the game, plus a short intro, guide links and footer below the fold |
+| `/how-to-play/` | full illustrated rules: glide, stick, mixing, par and stars, all 9 kinds of glass, chapters, daily, hints, shards, settings, keyboard |
+| `/guides/` + 19 guides | original articles with diagrams drawn from the real board renderer (`tools/site/figures.js`) |
+| `/archive/` | calendar of past dailies; `/?date=YYYY-MM-DD` plays one as practice (no streak or stats change); future days are locked |
+| `/about/`, `/contact/`, `/privacy/`, `/terms/` | trust pages; contact is paneslide.game@gmail.com (written as HTML entities to slow scrapers, still a normal mailto link) |
+| `/404.html`, `sitemap.xml`, `robots.txt`, `manifest.webmanifest`, `sw.js` | generated |
+
+Every page has a title, description, canonical URL, Open Graph/Twitter card (`img/og.png`), and JSON-LD (WebSite, VideoGame, Article, FAQPage). Settings has **Progress code** (export/import of all `ps2:*` progress as a text code) and **Install app** (PWA; shown only when the browser offers it). The service worker uses a versioned cache (hash of the site files) and shows a "new version is ready · Refresh" toast instead of swapping silently.
+
+### One config file: `site.config.js`
+
+```js
+SITE_URL: "https://paneslide.github.io",   // change when a custom domain is added, then rebuild
+CONTACT_EMAIL: "paneslide.game@gmail.com",
+ADS_ENABLED: false,  ADSENSE_CLIENT: "",  ADSENSE_SLOTS: {...},   // ads stay OFF until approval
+ANALYTICS_ENABLED: false,  GOATCOUNTER_CODE: "",                 // GoatCounter, OFF
+GSC_VERIFICATION: "",                                            // Search Console meta tag content
+```
+
+After any change run `node tools/build-site.js --check`, then commit and push.
+
+- **Ads:** slots are `<div class="ad-slot" data-slot="…">` spaces inside guide articles and in the home intro below the game, never on or over the board. Nothing loads while `ADS_ENABLED` is false (or `ADSENSE_CLIENT` is not a `ca-pub-…` id). A consent hook (`window.PaneSlideConsent`, fed by `googlefc`) is there for Google's certified CMP (Funding Choices), which AdSense offers free for EEA/UK visitors. After AdSense approval, add a file `ads.txt` at the site root containing one line: `google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0` (your own publisher id). `ads.txt` only works at a domain root, which is one reason AdSense needs a custom domain rather than `github.io`.
+- **GoatCounter (free, cookie-free analytics):** sign up at goatcounter.com, choose a code (e.g. `paneslide`), put it in `GOATCOUNTER_CODE`, set `ANALYTICS_ENABLED: true`, rebuild, push. The privacy page already describes it.
+- **Google Search Console:** add the URL-prefix property `https://paneslide.github.io/`, choose "HTML tag", copy only the `content="..."` value into `GSC_VERIFICATION`, rebuild, push, press Verify, then submit `sitemap.xml`.
+
+## Roadmap (not built yet)
+
+Twin panes (two panes that move together), portals, paint cells (recolour a pane), cracked glass (breaks after N moves), picture-shaped targets (non-square boards), a music mood per chapter, and shop backgrounds. A custom domain (about $10 a year) comes before AdSense.
 
 ## Dark mode
 
@@ -84,6 +119,10 @@ Static site: no build step, no server, no accounts. To host it, publish this fol
   - it renders a music take (Café, Rain and Music box) and fails if it peaks above −1 dBFS or has a click (a burst of treble far above the frames around it);
   - it fails on any console error or if the PLAY bar covers a map node;
   - it needs `python3 -m http.server 8765` running in this folder, and Firefox via `npx playwright-core install firefox`.
+- `node tools/build-site.js --check` rebuilds the website pages and fails if a guide is outside 600–1200 words.
+- `PW=$(npm root -g)/playwright-core node tools/test-site.js` opens every sitemap page plus the 404 in Chromium light/dark/forced dark and Firefox dark at 360×740 and 412×915 (`ONLY=` picks one). It fails on console errors, HTTP errors, sideways overflow, broken images, missing alt text, unlabeled SVGs, more than one h1, and duplicate titles/descriptions. It also checks the archive rules (future dates locked, past dates are practice and leave stats alone) and the progress-code round trip.
+- `node tools/check-links.js [--external]` checks every internal link and #anchor in the built HTML (and optionally the outside links).
+- `PW=... node tools/make-icons.js` redraws the app icons and `img/og.png`; `PW=... node tools/screens-site.js` and `tools/capture-guides.js` make the website screenshots.
 - `node tools/darkreader-check.js` checks two things: that Dark Reader honours the lock, and that the canvas board keeps its colours even when the lock is removed. It needs `npm i --prefix /tmp/dr darkreader@4`.
 
 All art, colours, icons and sounds (WebAudio) are original and made in code. The one exception is the font, Fredoka, which is self-hosted under the SIL OFL. See credits.txt.
