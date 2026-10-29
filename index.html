@@ -10,7 +10,7 @@
 <meta name="description" content="PaneSlide is a free colour-glass sliding puzzle game. Slide glass panes so the window matches the picture. Where glass overlaps, colours mix. A new daily puzzle plus endless levels.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preload" href="fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=6">
+<link rel="stylesheet" href="css/style.css?v=7">
 </head>
 <body>
 <div class="scene" id="scene" aria-hidden="true">
@@ -80,25 +80,28 @@
 <dialog id="dlgHelp" class="panel">
   <div class="ribbon purple">How to play</div>
   <button class="cbtn round red x" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-  <div class="demo" aria-hidden="true">
-    <div class="dgrid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-    <div class="dp dm"></div><div class="dp dc"></div><div class="dhand">👆</div>
-    <div class="dgoal"><i></i><i class="b"></i><i class="m"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="hgoal"><span aria-hidden="true">🎯</span><b>Match the picture</b></div>
+  <div class="hdemos">
+    <figure class="hd" aria-label="Swipe: glass glides to the edge">
+      <div class="hg" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="hp c glide" aria-hidden="true"></div><div class="hh glide" aria-hidden="true">👆</div>
+      <figcaption>👆 Glides</figcaption>
+    </figure>
+    <figure class="hd" aria-label="Glass stops when it slides onto new colour">
+      <div class="hg" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="hp c fixed" aria-hidden="true"></div><div class="hp m stick" aria-hidden="true"></div><div class="hh stick" aria-hidden="true">👆</div>
+      <figcaption>🧲 Sticks on colour</figcaption>
+    </figure>
   </div>
-  <ul class="glide-rules">
-    <li><b>👆</b><span>Swipe glass. It glides to the edge, or to glass going the same way…</span></li>
-    <li><b>🧲</b><span>…or <em>sticks</em> as soon as it slides onto new colour.</span></li>
-    <li><b>↶</b><span>Order matters. Undo any time.</span></li>
-  </ul>
   <div class="mixes" id="mixList"></div>
   <div class="rules">
     <div><span class="st3"></span><i class="ico flag"></i><b>+1</b></div>
-    <div><span class="st2"></span><b>a few more</b></div>
+    <div><span class="st2"></span><b>more</b></div>
     <div><i class="ico bulb"></i><span class="st3"></span><b>OK</b></div>
   </div>
   <div class="help-btns">
-    <button class="cbtn big green" id="btnReplayTut"><span class="lbl">TUTORIAL</span> <span>▶</span></button>
-    <button class="cbtn big blue" id="btnTipsAgain"><span class="lbl">TIPS</span> <span>💬</span></button>
+    <button class="cbtn big green" id="btnReplayTut"><span class="lbl">TUTORIAL</span></button>
+    <button class="cbtn big blue" id="btnTipsAgain" aria-label="Show tips again"><span class="lbl">TIPS</span></button>
   </div>
 </dialog>
 
@@ -159,7 +162,7 @@
   <label class="vol" for="optMusicVol"><span class="vi">🎵</span><span class="vl">Music volume</span><input type="range" id="optMusicVol" min="0" max="100" step="1" value="18"><b id="musicVolTxt">18%</b></label>
 </dialog>
 
-<script src="js/engine.js?v=6"></script>
-<script src="js/game.js?v=6"></script>
+<script src="js/engine.js?v=7"></script>
+<script src="js/game.js?v=7"></script>
 </body>
 </html>

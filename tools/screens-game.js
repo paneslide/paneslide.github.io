@@ -7,9 +7,9 @@ const base = process.argv[2] || "http://127.0.0.1:8765/";
 const out = __dirname + "/../screenshots/";
 const errors = [];
 function watch(page, tag) {
-  page.on("console", m => { if (m.type() === "error" || m.type() === "warning") errors.push(tag + " " + m.type() + ": " + m.text() + (process.env.DBG ? " @" + JSON.stringify(m.location()) + " " + page.url() : "")); });
+  page.on("console", m => { if (/\[.*fallbackfont\]/.test(tag) && /ERR_FAILED/.test(m.text())) return; if (m.type() === "error" || m.type() === "warning") errors.push(tag + " " + m.type() + ": " + m.text() + (process.env.DBG ? " @" + JSON.stringify(m.location()) + " " + page.url() : "")); });
   page.on("pageerror", e => errors.push(tag + " pageerror: " + e.message));
-  page.on("requestfailed", r => errors.push(tag + " requestfailed: " + r.url()));
+  page.on("requestfailed", r => /fallbackfont/.test(tag) && /\.woff2$/.test(r.url()) || errors.push(tag + " requestfailed: " + r.url()));
 }
 async function idle(page) { await page.waitForFunction(() => !PS.busy, null, { timeout: 4000 }); await page.waitForTimeout(60); }
 async function swipe(page, pi, dir) { // real pointer swipe on a cell of pane pi
@@ -104,10 +104,14 @@ async function run(browser, tag, ctxOpts, full, darkReader) {
   await solve(page);
   await page.waitForSelector("#dlgLevel[open]", { timeout: 4000 }); await page.waitForTimeout(800);
   console.log(tag, "L1 stars:", await page.evaluate(() => PS.progress.stars[1]));
-  for (const L of [5, 10, 12, 20]) {
+  for (const L of [5, 9, 10, 12, 20]) {
     await go("&level=" + L);
     const cc = await colourCheck(page, tag);
     await page.screenshot({ path: out + "level" + L + sfx + ".png" });
+    if ((L === 9 || L === 10) && full) {
+      const bb = await page.evaluate(() => { const r = document.querySelector("#board canvas").getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; });
+      await page.screenshot({ path: out + "glass-closeup-level" + L + ".png", clip: bb });
+    }
     if (L === 12 && full) { // glass close-up of the board (locked glass has bolts)
       const bb = await page.evaluate(() => { const r = document.querySelector("#board canvas").getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; });
       await page.screenshot({ path: out + "glass-closeup-locked.png", clip: bb });
@@ -144,6 +148,9 @@ async function run(browser, tag, ctxOpts, full, darkReader) {
     await page.click("#btnMusic"); await page.waitForTimeout(300);
     console.log(tag, "music after first tap:", JSON.stringify(m1), "after mute:", JSON.stringify(m2), "after unmute:", JSON.stringify(await page.evaluate(() => PS.music)));
     if (!m1.playing || m2.playing || m1.vol !== 0.18) errors.push(tag + " music toggle did not behave");
+    const mc = await page.evaluate(() => PS.musicCheck());
+    console.log(tag, "music take (offline render):", JSON.stringify(mc));
+    if (!(mc.peakDb < -1) || mc.seamPeakOrJump > 0.891 || mc.maxJump > 0.25 || !(mc.clickRatio < 3.5)) errors.push(tag + " music render failed the clipping/discontinuity check " + JSON.stringify(mc));
     await page.click("#btnHomeSettings"); await page.waitForTimeout(800); await page.screenshot({ path: out + "settings.png" });
     // coach marks (tests switch them off unless &marks=1)
     await go("&marks=1"); await page.waitForTimeout(1200);
@@ -152,12 +159,60 @@ async function run(browser, tag, ctxOpts, full, darkReader) {
     console.log(tag, "L1 mark:", await page.evaluate(() => PS.markShown)); await page.screenshot({ path: out + "tooltip-glide.png" });
     await go("&level=12&marks=1"); await page.waitForTimeout(1200);
     let k = await page.evaluate(() => PS.markShown), guard = 0;
-    while (k && k !== "locked" && guard++ < 8) { await page.mouse.click(30, 400); await page.waitForTimeout(900); k = await page.evaluate(() => PS.markShown); }
+    while (k !== "locked" && guard++ < 10) { if (k) await page.mouse.click(30, 400); await page.waitForTimeout(900); k = await page.evaluate(() => PS.markShown); }
     console.log(tag, "L12 mark:", k); await page.screenshot({ path: out + "tooltip-locked.png" });
     if (k !== "locked") errors.push(tag + " locked-glass tip did not show");
     await page.mouse.click(30, 400); await page.waitForTimeout(600);
     console.log(tag, "after tap, mark:", await page.evaluate(() => PS.markShown), "seen:", await page.evaluate(() => JSON.parse(localStorage.getItem("ps2:prefs")).marks.join(",")));
   }
+  await ctx.close();
+}
+async function overflow(page, where) { // any text sticking out of its button/chip/tile, or off screen
+  const bad = await page.evaluate(() => {
+    const vis = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none"; };
+    const root = document.querySelector("dialog[open]") || document.querySelector("main, body");
+    const boxes = [...root.querySelectorAll(".cbtn, .stat, .tile, .ribbon, .tgl, .vol, .gift, .rules > div, .mixes span, .chap, .hd figcaption, .hgoal, .cm-bub, .mapbar, .badge, #status")].filter(vis);
+    const out = [];
+    boxes.forEach(b => {
+      const r = b.getBoundingClientRect();
+      if (r.left < -1 || r.right > innerWidth + 1) out.push("off-screen: " + (b.id || b.className) + " " + Math.round(r.left) + ".." + Math.round(r.right));
+      if (b.scrollWidth > b.clientWidth + 2 && getComputedStyle(b).overflowX !== "visible") out.push("clipped: " + (b.id || b.className) + " " + b.scrollWidth + ">" + b.clientWidth);
+      b.querySelectorAll("*").forEach(c => { if (!vis(c) || c.closest("svg") && c.tagName !== "svg" || c.id === "hintCount") return; /* hint count is a deliberate corner badge */ const q = c.getBoundingClientRect(); if (q.left < r.left - 1 || q.right > r.right + 1) out.push("sticks out: " + (c.className || c.tagName) + " in " + (b.id || b.className)); });
+      const l = b.querySelector(".lbl"); if (l && l.scrollWidth > l.clientWidth + 1) out.push("label cut: " + (b.id || b.className) + " '" + l.textContent + "'");
+    });
+    return [...new Set(out)];
+  });
+  console.log("  overflow @", where, bad.length ? bad : "ok");
+  bad.forEach(b => errors.push(where + " " + b));
+}
+async function sizes(browser, w, h, noFont) {
+  const tag = w + "x" + h + (noFont ? "-fallbackfont" : "");
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2 });
+  const page = await ctx.newPage(); watch(page, "[" + tag + "]");
+  if (noFont) await page.route("**/*.woff2", r => r.abort());
+  const go = async q => { // the fallback run swaps in a wide font (DejaVu Sans), harsher than Roboto on Android
+    await page.goto(base + "?test=1&tutorial=0" + q, { waitUntil: "load" });
+    if (noFont) await page.addStyleTag({ content: '*, *::before, *::after { font-family: "DejaVu Sans", sans-serif !important; }' });
+    await page.waitForTimeout(600);
+  };
+  await page.addInitScript(() => { if (!localStorage.getItem("ps2:prefs")) localStorage.setItem("ps2:prefs", JSON.stringify({ sound: false, tutDone: true, glideTut: true, music: false })); });
+  await go(""); await overflow(page, tag + " home");
+  await page.click("#btnHelp"); await page.waitForTimeout(800); await overflow(page, tag + " help");
+  if (w === 360 && !noFont) await page.screenshot({ path: out + "help-360.png" });
+  if (w === 412 && !noFont) await page.screenshot({ path: out + "help-412.png" });
+  if (noFont) await page.screenshot({ path: out + "help-360-fallbackfont.png" });
+  await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+  await page.click("#btnHomeSettings"); await page.waitForTimeout(700); await overflow(page, tag + " settings"); await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+  await page.click("#btnStats"); await page.waitForTimeout(700); await overflow(page, tag + " stats"); await page.keyboard.press("Escape"); await page.waitForTimeout(300);
+  await go("&mode=levels"); await overflow(page, tag + " map");
+  for (const L of [4, 5]) {
+    await go("&level=" + L); await overflow(page, tag + " level " + L);
+    await solve(page); await page.waitForSelector("#dlgLevel[open], #dlgMile[open]", { timeout: 5000 }); await page.waitForTimeout(1600);
+    await overflow(page, tag + (L === 5 ? " milestone card" : " level-end card"));
+  }
+  await go("&mode=daily"); await solve(page); await page.waitForSelector("#dlgEnd[open]", { timeout: 5000 }); await page.waitForTimeout(1400);
+  await overflow(page, tag + " daily-end card");
+  await go("&level=12&marks=1"); await page.waitForTimeout(1300); await overflow(page, tag + " coach mark");
   await ctx.close();
 }
 (async () => {
@@ -168,6 +223,11 @@ async function run(browser, tag, ctxOpts, full, darkReader) {
     if (!only || only === "dark") await run(b1, "dark", { colorScheme: "dark" }, false);
     if (!only || only === "darkreader") await run(b1, "darkreader", { colorScheme: "dark" }, false, true);
     await b1.close();
+  }
+  if (!only || only === "sizes") {
+    const b0 = await pw.chromium.launch(chrome);
+    await sizes(b0, 360, 740); await sizes(b0, 412, 915); await sizes(b0, 360, 740, true);
+    await b0.close();
   }
   if (!only || only === "forcedark") {
     const b2 = await pw.chromium.launch({ executablePath: chrome.executablePath, args: ["--no-sandbox", "--force-dark-mode", "--enable-features=WebContentsForceDark"] });

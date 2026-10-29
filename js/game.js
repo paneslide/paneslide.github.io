@@ -120,7 +120,7 @@
   }
   function ensureLevels(cb) {
     if (window.PANESLIDE_LEVELS) return cb();
-    var sc = document.createElement("script"); sc.src = "js/levels.js?v=6"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+    var sc = document.createElement("script"); sc.src = "js/levels.js?v=7"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
   }
   function getLevel(N) {
     var D = window.PANESLIDE_LEVELS;
@@ -148,13 +148,22 @@
   // ---------- audio (synthesised, self-made) ----------
   var ac = null;
   var gestured = false; // browsers only allow sound after the player has tapped (no AudioContext before that)
-  function actx() { if (!gestured) return null; if (!ac) { var A = window.AudioContext || window.webkitAudioContext; if (A) ac = new A(); } if (ac && ac.state === "suspended") { var r = ac.resume(); if (r && r.catch) r.catch(function () {}); } return ac; } // Firefox rejects a pending resume() when you leave the page
+  function actx() { if (!gestured) return null; if (!ac) { var A = window.AudioContext || window.webkitAudioContext; if (A) { try { ac = new A({ latencyHint: "balanced" }); } catch (e) { ac = new A(); } } } if (ac && ac.state === "suspended") { var r = ac.resume(); if (r && r.catch) r.catch(function () {}); } return ac; } // Firefox rejects a pending resume() when you leave the page
   function tone(f, dur, type, vol, when) {
     if (!prefs.sound) return; var a = actx(); if (!a) return;
     var t = a.currentTime + (when || 0), o = a.createOscillator(), g = a.createGain();
     o.type = type || "sine"; o.frequency.value = f;
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur + 0.05);
+    o.connect(g).connect(master()); o.start(t); o.stop(t + dur + 0.05);
+    o.onended = function () { o.disconnect(); g.disconnect(); };
+  }
+  var masterNode = null;
+  function master() { // everything goes through one soft limiter, so music + effects can never clip
+    if (masterNode) return masterNode;
+    var a = ac, lim = a.createDynamicsCompressor();
+    lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.25;
+    var g = a.createGain(); g.gain.value = 0.9; lim.connect(g); g.connect(a.destination);
+    masterNode = lim; return lim;
   }
   var sfx = {
     step: function () { tone(1400, 0.03, "sine", 0.025); },
@@ -210,7 +219,8 @@
     x.fillStyle = (getComputedStyle(document.body).getPropertyValue("--frame2") || "").trim() || "#D9CCF7"; rr(x, 0, 0, side + 8, side + 8, 10); x.fill();
     puz.target.forEach(function (m, k) {
       var cx = 4 + (k % n) * (tc + g), cy = 4 + Math.floor(k / n) * (tc + g);
-      x.fillStyle = m ? maskColor(m) : WELL; rr(x, cx, cy, tc, tc, 5); x.fill(); // flat colour: a picture, not glass
+      x.fillStyle = m ? maskColor(m) : WELL; rr(x, cx, cy, tc, tc, 5); x.fill(); // exactly the colours the board shows
+      if (m) { x.strokeStyle = "rgba(255,255,255,.85)"; x.lineWidth = 1.5; rr(x, cx + 1, cy + 1, tc - 2, tc - 2, 4); x.stroke(); x.fillStyle = "rgba(255,255,255,.35)"; rr(x, cx + tc * 0.16, cy + tc * 0.14, tc * 0.36, Math.max(2.5, tc * 0.1), 1.5); x.fill(); }
       if (prefs.patterns && m) patternInto(x, m, cx, cy, tc);
     });
     t.setAttribute("role", "img"); t.setAttribute("aria-label", "Target picture, " + n + " by " + n);
@@ -231,34 +241,63 @@
       if (rt && dn && on[(c[0] + 1) + "," + (c[1] + 1)]) ctx.rect(px + CELL - R, py + CELL - R, GAP + 2 * R, GAP + 2 * R);
     });
   }
+  // v7: each pane = a flat colour body on the "darken" glass layer (so mixes are exact and match the
+  // target), plus a decor layer drawn on top: a light rim around the piece's outer edge, a thin line
+  // in the pane's own darker colour just inside it, soft grooves between its cells, and bolts if
+  // locked. Where two panes overlap, both outlines stay visible: glass over glass.
+  function shade(h, k) { return "rgb(" + rgb(h).map(function (v) { return Math.round(v * k); }).join(",") + ")"; }
+  function erodeInto(p, W, H, d) { // the pane shape shrunk by d px (intersection of 16 shifted copies)
+    var c = document.createElement("canvas"), x = hiDPI(c, W, H);
+    x.fillStyle = "#000"; panePath(x, p, 0, 0); x.fill();
+    if (d <= 0) return c;
+    x.globalCompositeOperation = "destination-in";
+    for (var k = 0; k < 16; k++) { var a = k * Math.PI / 8; panePath(x, p, d * Math.cos(a), d * Math.sin(a)); x.fill(); } // 16 directions: smooth inner corners
+    return c;
+  }
+  function band(p, W, H, d0, d1, col) { // ring between insets d0 and d1, in colour col
+    var c = document.createElement("canvas"), x = hiDPI(c, W, H);
+    x.drawImage(erodeInto(p, W, H, d0), 0, 0, W, H);
+    x.globalCompositeOperation = "destination-out"; x.drawImage(erodeInto(p, W, H, d1), 0, 0, W, H);
+    x.globalCompositeOperation = "source-in"; x.fillStyle = col; x.fillRect(0, 0, W, H);
+    return c;
+  }
   function makeSprite(p) {
-    var W = p.w * STEP - GAP, H = p.h * STEP - GAP, cv = document.createElement("canvas"), s = hiDPI(cv, W, H), b = Math.max(2.5, CELL / 22);
+    var W = p.w * STEP - GAP, H = p.h * STEP - GAP, b = Math.max(3, CELL / 18), R = Math.round(CELL * 0.2);
+    var body = document.createElement("canvas"), s = hiDPI(body, W, H);
     panePath(s, p, 0, 0); s.fillStyle = HEX[p.color]; s.fill();
     s.globalCompositeOperation = "source-atop";
-    var v = s.createLinearGradient(0, 0, 0, H); v.addColorStop(0, "rgba(255,255,255,.30)"); v.addColorStop(Math.min(0.45, CELL / H * 0.5), "rgba(255,255,255,0)"); v.addColorStop(1, "rgba(30,0,60,.10)");
-    s.fillStyle = v; s.fillRect(0, 0, W, H);
-    var D = CELL * 1.5, g = s.createLinearGradient(0, 0, D, D);
-    [[0, .55], [.2, .16], [.3, 0], [.4, 0], [.42, .5], [.47, .5], [.49, 0], [.53, 0], [.545, .32], [.57, .32], [.585, 0], [1, 0]].forEach(function (q) { g.addColorStop(q[0], "rgba(255,255,255," + q[1] + ")"); });
-    if (!p.locked) { s.fillStyle = g; s.fillRect(0, 0, W, H); }
-    function rim(col, dx, dy, alpha) { // edge light: the shape minus itself shifted
-      var t = document.createElement("canvas"), tx = hiDPI(t, W, H);
-      panePath(tx, p, 0, 0); tx.fillStyle = col; tx.fill();
-      tx.globalCompositeOperation = "destination-out"; panePath(tx, p, dx, dy); tx.fill();
-      s.globalAlpha = alpha; s.drawImage(t, 0, 0, W, H); s.globalAlpha = 1;
-    }
-    rim("#FFFFFF", b, b, 0.95);
-    rim("#1E0A46", -b, -b, p.locked ? 0.5 : 0.25);
+    p.cells.forEach(function (c) { // a soft top light and a small gloss per cell; cells line up, so stacked glass stays clean
+      var lx = c[1] * STEP, ly = c[0] * STEP, lg = s.createLinearGradient(0, ly, 0, ly + CELL * 0.55);
+      lg.addColorStop(0, "rgba(255,255,255,.30)"); lg.addColorStop(1, "rgba(255,255,255,0)");
+      s.fillStyle = lg; s.fillRect(lx, ly, CELL, CELL * 0.55);
+      s.fillStyle = "rgba(255,255,255,.42)"; rr(s, lx + CELL * 0.14, ly + CELL * 0.12, CELL * 0.36, Math.max(4, CELL * 0.09), Math.max(2, CELL * 0.045)); s.fill();
+    });
+    s.globalCompositeOperation = "source-over";
+    var deco = document.createElement("canvas"), d = hiDPI(deco, W, H);
+    d.drawImage(band(p, W, H, 0, b, "rgba(255,255,255,.92)"), 0, 0, W, H); // light rim on the outer edge
+    d.drawImage(band(p, W, H, b, b + 1.6, shade(HEX[p.color], p.locked ? 0.45 : 0.62)), 0, 0, W, H); // the pane's own colour line
+    var on = {}; p.cells.forEach(function (c) { on[c[0] + "," + c[1]] = 1; });
+    d.lineCap = "round";
+    p.cells.forEach(function (c) { // soft grooves between the cells of one piece
+      var px = c[1] * STEP, py = c[0] * STEP, gx = px + CELL + GAP / 2, gy = py + CELL + GAP / 2, m = R * 0.9;
+      function groove(x1, y1, x2, y2, vx, vy) {
+        d.strokeStyle = shade(HEX[p.color], 0.72); d.globalAlpha = 0.45; d.lineWidth = 1.4; d.beginPath(); d.moveTo(x1, y1); d.lineTo(x2, y2); d.stroke();
+        d.strokeStyle = "#FFFFFF"; d.globalAlpha = 0.45; d.beginPath(); d.moveTo(x1 + vx, y1 + vy); d.lineTo(x2 + vx, y2 + vy); d.stroke(); d.globalAlpha = 1;
+      }
+      if (on[c[0] + "," + (c[1] + 1)]) groove(gx, py + m, gx, py + CELL - m, 1.4, 0);
+      if (on[(c[0] + 1) + "," + c[1]]) groove(px + m, gy, px + CELL - m, gy, 0, 1.4);
+    });
     if (p.locked) { // metal frame + bolts: clearly fixed in place
-      rim("#4A3B6B", b * 1.8, b * 1.8, 0.55); rim("#4A3B6B", -b * 1.8, -b * 1.8, 0.35);
+      d.drawImage(band(p, W, H, b + 1.6, b + 4.5, "rgba(74,59,107,.55)"), 0, 0, W, H);
       p.cells.forEach(function (c) {
-        [[0.17, 0.17], [0.83, 0.17], [0.17, 0.83], [0.83, 0.83]].forEach(function (q) {
+        [[0.2, 0.2], [0.8, 0.2], [0.2, 0.8], [0.8, 0.8]].forEach(function (q) {
           var bx = c[1] * STEP + CELL * q[0], by = c[0] * STEP + CELL * q[1], r = Math.max(2.6, CELL / 20);
-          var bg = s.createRadialGradient(bx - r / 3, by - r / 3, 0, bx, by, r); bg.addColorStop(0, "#FFFFFF"); bg.addColorStop(1, "#8D88A6");
-          s.beginPath(); s.arc(bx, by, r, 0, 6.3); s.fillStyle = bg; s.fill(); s.strokeStyle = "rgba(40,20,80,.45)"; s.lineWidth = 1; s.stroke();
+          var bg = d.createRadialGradient(bx - r / 3, by - r / 3, 0, bx, by, r); bg.addColorStop(0, "#FFFFFF"); bg.addColorStop(1, "#8D88A6");
+          d.beginPath(); d.arc(bx, by, r, 0, 6.3); d.fillStyle = bg; d.fill(); d.strokeStyle = "rgba(40,20,80,.45)"; d.lineWidth = 1; d.stroke();
         });
       });
     }
-    return { cv: cv, W: W, H: H };
+    return { cv: body, deco: deco, W: W, H: H };
   }
   function makeTiles() { paneSprites = puz.panes.map(makeSprite); glassCv = document.createElement("canvas"); }
   function drawBoard() {
@@ -277,29 +316,32 @@
     }
     puz.panes.forEach(function (p, i) { // drop shadows (the glass covers its own)
       var o = vis[i], up = i === liftPi; x.save();
-      x.shadowColor = "rgba(40,15,90," + (up ? 0.42 : 0.34) + ")"; x.shadowBlur = up ? 16 : 9; x.shadowOffsetY = up ? 8 : 4;
+      x.shadowColor = "rgba(40,15,90," + (up ? 0.42 : 0.3) + ")"; x.shadowBlur = up ? 16 : 8; x.shadowOffsetY = up ? 8 : 4;
       panePath(x, p, PAD + o[0], PAD + o[1]); x.fillStyle = HEX[p.color]; x.fill(); x.restore();
     });
-    // glass layer: panes composited with "darken" on their own layer, so mixes are exact
+    // glass layer: flat bodies composited with "darken" on their own layer, so mixes are exact
     if (glassCv.width !== boardCv.width) { glassCv.width = boardCv.width; glassCv.height = boardCv.height; }
     var gx = glassCv.getContext("2d"); gx.setTransform(1, 0, 0, 1, 0, 0); gx.globalCompositeOperation = "source-over"; gx.clearRect(0, 0, glassCv.width, glassCv.height);
     gx.setTransform(k, 0, 0, k, 0, 0); gx.globalCompositeOperation = "darken";
     puz.panes.forEach(function (p, i) { var sp = paneSprites[i]; gx.drawImage(sp.cv, PAD + vis[i][0], PAD + vis[i][1], sp.W, sp.H); });
     x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.drawImage(glassCv, 0, 0); x.restore();
+    puz.panes.forEach(function (p, i) { // outlines on top, so stacked glass shows both edges
+      var sp = paneSprites[i]; x.drawImage(sp.deco, PAD + vis[i][0], PAD + vis[i][1], sp.W, sp.H);
+    });
     puz.panes.forEach(function (p, i) {
       var o = vis[i], focus = paneEls[i] === document.activeElement && !TEST, hinted = hintPi === i;
       if (shimmerT >= 0 && !p.locked) { // idle shimmer: a soft light sweeps over the movable glass
         var bx = PAD + o[0], by = PAD + o[1], W = paneSprites[i].W, H = paneSprites[i].H, sx = bx - CELL + shimmerT * (W + H + CELL * 2);
         x.save(); panePath(x, p, bx, by); x.clip();
         var sg = x.createLinearGradient(sx - CELL * 0.5, by, sx + CELL * 0.5, by + CELL * 0.5);
-        sg.addColorStop(0, "rgba(255,255,255,0)"); sg.addColorStop(0.5, "rgba(255,255,255,.42)"); sg.addColorStop(1, "rgba(255,255,255,0)");
+        sg.addColorStop(0, "rgba(255,255,255,0)"); sg.addColorStop(0.5, "rgba(255,255,255,.32)"); sg.addColorStop(1, "rgba(255,255,255,0)");
         x.fillStyle = sg; x.fillRect(bx, by, W, H); x.restore();
       }
       p.cells.forEach(function (cl) {
         var px = PAD + o[0] + cl[1] * STEP, py = PAD + o[1] + cl[0] * STEP;
         if (prefs.patterns) patternInto(x, E.BIT[p.color], px, py, CELL);
-        if (focus || hinted) { x.strokeStyle = hinted ? "#FFB800" : "#6A46EA"; x.lineWidth = 4; rr(x, px + 2, py + 2, CELL - 4, CELL - 4, R - 2); x.stroke(); }
       });
+      if (focus || hinted) { var sp = paneSprites[i], key = hinted ? "hintRim" : "focusRim"; if (!sp[key]) sp[key] = band(p, sp.W, sp.H, 0, 4.5, hinted ? "#FFB800" : "#6A46EA"); x.drawImage(sp[key], PAD + o[0], PAD + o[1], sp.W, sp.H); }
     });
   }
   var shimT = null;
@@ -326,7 +368,7 @@
       else { if (bounceBack) vis[pi] = from; else vis[pi] = to.slice(); puz.panes.forEach(function (q, i) { moveGrip(i); }); drawBoard(); anims.splice(anims.indexOf(id), 1); if (liftPi === pi && !anims.length) { liftPi = -1; drawBoard(); } if (done) done(); }
     })(t0);
   }
-  function moveGrip(pi) { var p = puz.panes[pi], hc = p.cells[gripAt[pi]] || gripCell(p); gripEls[pi].style.transform = "translate(" + (PAD + vis[pi][0] + hc[1] * STEP) + "px," + (PAD + vis[pi][1] + hc[0] * STEP) + "px)"; }
+  function moveGrip(pi) { var p = puz.panes[pi], hc = gripPos[pi] || p.cells[gripAt[pi]] || gripCell(p); gripEls[pi].style.transform = "translate(" + (PAD + vis[pi][0] + hc[1] * STEP) + "px," + (PAD + vis[pi][1] + hc[0] * STEP) + "px)"; }
 
   function build() {
     measure();
@@ -357,7 +399,7 @@
     el("div", "sparkle", boardEl);
     updateMoves(false); updateUndo(); drawBoard();
   }
-  var gripAt = []; // shape-cell index each pane's arrow sits on
+  var gripAt = [], gripPos = []; // shape-cell index each pane's arrow sits on, and its exact spot (in cells)
   function place(pi, pos, ms) {
     var p = puz.panes[pi], o = offset(p, pos);
     paneEls[pi].style.transform = "translate(" + o[0] + "px," + o[1] + "px)";
@@ -375,7 +417,17 @@
         var ka = cells[a][0] * n + cells[a][1], kb = cells[b][0] * n + cells[b][1];
         return ((taken[ka] ? 100 : 0) + cover[ka] * 10 + Math.abs(p.cells[a][0] - cr) + Math.abs(p.cells[a][1] - cc)) - ((taken[kb] ? 100 : 0) + cover[kb] * 10 + Math.abs(p.cells[b][0] - cr) + Math.abs(p.cells[b][1] - cc));
       });
-      var j = order[0], c = cells[j]; taken[c[0] * n + c[1]] = 1; gripAt[i] = j;
+      var j = order[0], c = cells[j]; gripAt[i] = j; gripPos[i] = p.cells[j];
+      // centre the arrow on the piece when the middle of the piece is glass of this pane only
+      var mr = 0, mc = 0; p.cells.forEach(function (q) { mr += q[0]; mc += q[1]; }); mr /= p.cells.length; mc /= p.cells.length;
+      var rows = [Math.floor(mr), Math.ceil(mr)], cols = [Math.floor(mc), Math.ceil(mc)], ok = true, keys = [];
+      rows.forEach(function (a) { cols.forEach(function (b) {
+        var inShape = p.cells.some(function (q) { return q[0] === a && q[1] === b; }), base = cells[p.cells.findIndex(function (q) { return q[0] === a && q[1] === b; })];
+        if (!inShape || !base) { ok = false; return; }
+        var kk = base[0] * n + base[1]; if (cover[kk] > 1 || taken[kk]) ok = false; keys.push(kk);
+      }); });
+      if (ok) { gripPos[i] = [mr, mc]; keys.forEach(function (kk) { taken[kk] = 1; }); }
+      else taken[c[0] * n + c[1]] = 1;
     });
   }
   function gripCell(p) { // the shape cell nearest the middle of the pane
@@ -887,6 +939,7 @@
     duo: ["🎨", "Only two colours in this picture."],
     challenge: ["🏆", "A trickier one. Take your time!"],
     breather: ["🌿", "A relaxing one. Enjoy!"],
+    mix: ["🌈", "Glass over glass mixes colours, like real filters."],
     stuck: ["↶", "No way through from here. Undo a swipe!"],
     rank: ["🏅", "A new rank step and a free hint every 10 levels."],
     gift: ["🎁", "Fill the bar for a free hint!"],
@@ -950,6 +1003,10 @@
     if (N === 2 || (again && N > 2)) { mark("stick", first, 500); mark("undo", "btnUndo"); }
     if (N === 3 || (again && N > 3)) mark("order", function () { return boardEl.getBoundingClientRect(); }, 500);
     if (N >= 4) mark("hint", "btnHint", 500);
+    mark("mix", function () { // the first cell where two panes are stacked
+      var cnt = {}, hit = null; puz.panes.forEach(function (p, i) { E.paneCells(p, state.pos[i]).forEach(function (c) { var kk = c[0] * n + c[1]; cnt[kk] = (cnt[kk] || 0) + 1; if (cnt[kk] === 2 && !hit) hit = c; }); });
+      if (!hit) return null; var b = boardEl.getBoundingClientRect(); return { left: b.left + PAD + hit[1] * STEP, top: b.top + PAD + hit[0] * STEP, width: CELL, height: CELL };
+    }, 500);
     var lk = puz.panes.map(function (p, i) { return p.locked ? i : -1; }).filter(function (i) { return i >= 0; })[0];
     if (lk !== undefined) mark("locked", function () { return paneRect(lk); }, 500);
     if (puz.twist === "duo") mark("duo", "target", 500);
@@ -957,74 +1014,123 @@
     if (puz.breather) mark("breather", "lvBadge", 500);
   }
 
-  // ---------- background music: made live in the browser (no files, nothing to license) ----------
-  // Calm "puzzle cafe" style: slow soft chord pads (about 70 bpm) wandering between Cmaj7, Am7,
-  // Fmaj7, G6, Dm9 and Em7, with a sparse marimba-like melody from the pentatonic scale, an
-  // occasional bell, and a soft echo. Every bar is chosen at random, so it never loops the same way.
+  // ---------- background music: made in the browser (no files, nothing to license) ----------
+  // Calm "puzzle cafe" style: slow soft chord pads (70 bpm) wandering between Cmaj7, Am7, Fmaj7,
+  // G6, Dm9 and Em7, with a sparse marimba-like pentatonic melody, a rare bell and a soft room.
+  // v7: to stay glitch-free on phones, the music is rendered ONCE, off the main thread, with an
+  // OfflineAudioContext into two ~62 s takes (different random melodies). Playback is then just
+  // buffer sources queued on the audio clock a whole take ahead, so busy JS or a slow frame can't
+  // make it crackle. Each take is normalised to -3 dBFS and the output goes through a limiter.
   var music = (function () {
-    var a = null, bus = null, out = null, wet = null, timer = 0, nextT = 0, chord = 0, beat = 0, last = -1, api = { started: false, playing: false };
-    var BEAT = 60 / 70, CH = [[48, 55, 64, 71], [45, 52, 60, 67], [41, 48, 57, 64], [43, 50, 59, 64], [38, 50, 57, 64], [40, 47, 55, 62]];
+    var api = { started: false, playing: false, takes: [] }, out = null, srcs = [], timer = 0, nextAt = 0, turn = 0, rendering = null;
+    var BPM = 70, BEAT = 60 / BPM, BAR = BEAT * 8, BARS = 9, LOOP = BAR * BARS, TAIL = 3.5, RATE = 22050;
+    var CH = [[48, 55, 64, 71], [45, 52, 60, 67], [41, 48, 57, 64], [43, 50, 59, 64], [38, 50, 57, 64], [40, 47, 55, 62]];
     var GO = [[1, 2, 4, 5], [2, 4, 3], [0, 3, 4], [0, 1, 5], [3, 2, 0], [1, 2]], PENT = [72, 74, 76, 79, 81, 84, 86, 88];
     function hz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-    function setup() {
-      a = actx(); if (!a) return false;
-      if (bus) return true;
-      out = a.createGain(); out.gain.value = 0.0001; out.connect(a.destination);
-      bus = a.createBiquadFilter(); bus.type = "lowpass"; bus.frequency.value = 2600; bus.connect(out);
-      var len = Math.floor(a.sampleRate * 2.8), ir = a.createBuffer(2, len, a.sampleRate); // a soft room, made from fading noise
-      for (var ch = 0; ch < 2; ch++) { var d = ir.getChannelData(ch); for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
-      var cv = a.createConvolver(); cv.buffer = ir; wet = a.createGain(); wet.gain.value = 0.45; wet.connect(cv); cv.connect(bus);
-      return true;
+    function progression() { // starts on C, ends on a chord that leads home to C
+      for (var tries = 0; tries < 50; tries++) {
+        var seq = [0]; while (seq.length < BARS) { var go = GO[seq[seq.length - 1]]; seq.push(go[Math.floor(Math.random() * go.length)]); }
+        if (GO[seq[BARS - 1]].indexOf(0) >= 0 && seq[BARS - 1] !== 0) return seq;
+      }
+      return [0, 1, 2, 3, 0, 5, 1, 4, 3];
     }
-    function voice(f, t, dur, type, vol, att, rel, toWet) {
-      var o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + att); g.gain.setValueAtTime(vol, t + Math.max(att, dur - rel)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g); g.connect(bus); if (toWet) g.connect(wet); o.start(t); o.stop(t + dur + 0.1); return o;
-    }
-    function pad(notes, t, dur) {
-      notes.forEach(function (m, i) {
-        var lp = a.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900; lp.connect(bus); lp.connect(wet);
-        [-5, 5].forEach(function (cents) {
-          var o = a.createOscillator(), g = a.createGain(); o.type = i === 0 ? "sine" : "triangle"; o.frequency.value = hz(m); o.detune.value = cents;
-          var v = i === 0 ? 0.05 : 0.022;
-          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 1.8); g.gain.setValueAtTime(v, t + dur - 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 2.2);
-          o.connect(g); g.connect(lp); o.start(t); o.stop(t + dur + 2.4);
+    function renderTake() {
+      var OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext; if (!OAC) return Promise.reject(new Error("no offline audio"));
+      var len = Math.ceil((LOOP + TAIL) * RATE), o;
+      try { o = new OAC(2, len, RATE); } catch (e) { return Promise.reject(e); }
+      var bus = o.createBiquadFilter(); bus.type = "lowpass"; bus.frequency.value = 3200; bus.connect(o.destination);
+      var irLen = Math.floor(RATE * 2.4), ir = o.createBuffer(2, irLen, RATE); // a soft room, made from fading noise
+      for (var ch = 0; ch < 2; ch++) { var d = ir.getChannelData(ch); for (var i = 0; i < irLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 3) * 0.5; }
+      var cv = o.createConvolver(); cv.buffer = ir; var wet = o.createGain(); wet.gain.value = 0.35; wet.connect(cv); cv.connect(bus);
+      function env(g, t, peak, att, hold, rel) { // every note fades in and out: no clicks
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + att); g.gain.setValueAtTime(peak, t + att + hold); g.gain.linearRampToValueAtTime(0, t + att + hold + rel);
+        return t + att + hold + rel + 0.05;
+      }
+      function note(f, t, type, peak, att, hold, rel, toWet, detune) {
+        var osc = o.createOscillator(), g = o.createGain(); osc.type = type; osc.frequency.value = f; if (detune) osc.detune.value = detune;
+        osc.connect(g); g.connect(bus); if (toWet) g.connect(wet);
+        osc.start(t); osc.stop(env(g, t, peak, att, hold, rel));
+      }
+      var seq = progression(), last = -1;
+      seq.forEach(function (chord, bar) {
+        var t0 = bar * BAR;
+        CH[chord].forEach(function (m, i) { // pads: two detuned voices per note, slow swell
+          var lp = o.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900; lp.connect(bus); lp.connect(wet);
+          [-5, 5].forEach(function (cents) {
+            var osc = o.createOscillator(), g = o.createGain(); osc.type = i === 0 ? "sine" : "triangle"; osc.frequency.value = hz(m); osc.detune.value = cents;
+            osc.connect(g); g.connect(lp); osc.start(t0); osc.stop(env(g, t0, i === 0 ? 0.05 : 0.022, 1.8, BAR - 1.8, 2.6));
+          });
         });
-      });
-    }
-    function pluck(m, t, vol) { // marimba-ish: a sine plus a quick high partial
-      voice(hz(m), t, 1.4, "sine", vol, 0.006, 1.3, true);
-      voice(hz(m) * 4, t, 0.18, "sine", vol * 0.25, 0.003, 0.17, false);
-    }
-    function schedule() {
-      while (nextT < a.currentTime + 1.2) {
-        if (beat === 0) pad(CH[chord], nextT, BEAT * 8);
-        for (var half = 0; half < 2; half++) {
-          var t = nextT + half * BEAT / 2 + (Math.random() - 0.5) * 0.02;
-          if (Math.random() < (half ? 0.22 : 0.42) && beat < 7) {
-            var pool = PENT.filter(function (m) { return m !== last; }), m = pool[Math.floor(Math.random() * pool.length)];
+        for (var b = 0; b < 8; b++) for (var half = 0; half < 2; half++) {
+          var t = Math.max(0.01, t0 + b * BEAT + half * BEAT / 2 + (Math.random() - 0.5) * 0.02);
+          if (b < 7 && Math.random() < (half ? 0.22 : 0.42) && t < LOOP - 0.4) {
+            var pool = PENT.filter(function (q) { return q !== last; }), m = pool[Math.floor(Math.random() * pool.length)];
             if (last > 0 && Math.random() < 0.6) { var near = pool.filter(function (q) { return Math.abs(q - last) <= 5; }); if (near.length) m = near[Math.floor(Math.random() * near.length)]; }
-            last = m; pluck(m, t, 0.05 + Math.random() * 0.03);
+            last = m; var v = 0.05 + Math.random() * 0.03;
+            note(hz(m), t, "sine", v, 0.008, 0.05, 1.3, true);           // marimba-ish body
+            note(hz(m) * 4, t, "sine", v * 0.22, 0.004, 0, 0.16, false); // its quick bright partial
           }
         }
-        if (beat === 4 && Math.random() < 0.18) voice(hz(PENT[Math.floor(Math.random() * 3) + 4] + 12), nextT, 2.6, "sine", 0.018, 0.01, 2.5, true); // a little bell
-        nextT += BEAT; beat++;
-        if (beat >= 8) { beat = 0; var go = GO[chord]; chord = go[Math.floor(Math.random() * go.length)]; }
+        if (Math.random() < 0.35) note(hz(PENT[4 + Math.floor(Math.random() * 3)] + 12), t0 + BEAT * 4, "sine", 0.016, 0.01, 0, 2.6, true); // a little bell
+      });
+      return new Promise(function (res, rej) {
+        o.oncomplete = function (e) { res(e.renderedBuffer); };
+        var p = o.startRendering(); if (p && p.then) p.then(res, rej);
+      }).then(function (buf) { // normalise to -3 dBFS, and fade the very end of the tail to silence
+        var peak = 0, k, c, d2;
+        for (c = 0; c < buf.numberOfChannels; c++) { d2 = buf.getChannelData(c); for (k = 0; k < d2.length; k++) { var v = Math.abs(d2[k]); if (v > peak) peak = v; } }
+        var gain = peak > 0 ? 0.708 / peak : 1, fade = Math.floor(0.5 * RATE);
+        for (c = 0; c < buf.numberOfChannels; c++) { d2 = buf.getChannelData(c); for (k = 0; k < d2.length; k++) { var f = k > d2.length - fade ? (d2.length - k) / fade : 1; d2[k] *= gain * f; } }
+        return buf;
+      });
+    }
+    function ensureTakes() {
+      if (api.takes.length >= 2) return Promise.resolve();
+      if (rendering) return rendering;
+      rendering = renderTake().then(function (b) { api.takes.push(b); rendering = null; if (api.takes.length < 2) setTimeout(ensureTakes, 4000); }, function () { rendering = null; });
+      return rendering;
+    }
+    function level() { return 0.9 * Math.pow(prefs.musicVol, 1.3); } // even-feeling slider; 18% is a soft background
+    function queue() { // keep the next take queued on the audio clock, a whole take ahead
+      if (!api.playing || !api.takes.length) return;
+      while (nextAt < ac.currentTime + LOOP * 0.6) {
+        var b = api.takes[turn % api.takes.length]; turn++;
+        var src = ac.createBufferSource(); src.buffer = b; src.connect(out);
+        src.start(Math.max(nextAt, ac.currentTime + 0.05)); srcs.push(src);
+        src.onended = function () { this.disconnect(); var i = srcs.indexOf(this); if (i >= 0) srcs.splice(i, 1); };
+        nextAt += LOOP; // the next take starts while this one's tail rings out: seamless
       }
     }
-    function level() { return Math.pow(prefs.musicVol, 1.5) * 1.6; } // the slider feels even, from a whisper to clear
-    api.vol = function () { if (out && api.playing) out.gain.setTargetAtTime(Math.max(0.0001, level()), a.currentTime, 0.2); };
+    api.vol = function () { if (out && api.playing) out.gain.setTargetAtTime(level(), ac.currentTime, 0.15); };
     api.start = function () {
-      if (api.playing || document.hidden || !setup()) return;
+      if (api.playing || document.hidden || !actx()) return;
       api.started = api.playing = true;
-      nextT = Math.max(nextT, a.currentTime + 0.1); beat = 0;
-      out.gain.cancelScheduledValues(a.currentTime); out.gain.setValueAtTime(Math.max(0.0001, out.gain.value), a.currentTime);
-      out.gain.exponentialRampToValueAtTime(Math.max(0.0001, level()), a.currentTime + 3); // fade in
-      schedule(); clearInterval(timer); timer = setInterval(schedule, 250);
+      if (!out) { out = ac.createGain(); out.gain.value = 0; out.connect(master()); }
+      ensureTakes().then(function () {
+        if (!api.playing || srcs.length) return;
+        var t = ac.currentTime + 0.1; nextAt = t;
+        out.gain.cancelScheduledValues(ac.currentTime); out.gain.setValueAtTime(out.gain.value, ac.currentTime); out.gain.linearRampToValueAtTime(0, t); out.gain.linearRampToValueAtTime(level(), t + 2.5); // fade in
+        queue(); clearInterval(timer); timer = setInterval(queue, 5000);
+      });
     };
     api.stop = function () {
       if (!api.playing) return; api.playing = false; clearInterval(timer); timer = 0;
-      if (a && out) { out.gain.cancelScheduledValues(a.currentTime); out.gain.setTargetAtTime(0.0001, a.currentTime, 0.25); }
+      if (!ac || !out) return;
+      var t = ac.currentTime; out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(out.gain.value, t); out.gain.linearRampToValueAtTime(0, t + 0.4); // fade out, then stop
+      srcs.forEach(function (sn) { try { sn.stop(t + 0.5); } catch (e) {} }); srcs = [];
+    };
+    api.check = function () { // test hook: render a take and measure peak + the biggest sample jump
+      return renderTake().then(function (b) {
+        var peak = 0, jump = 0, seam = 0, d = b.getChannelData(0), L = Math.floor(LOOP * RATE);
+        for (var i = 1; i < d.length; i++) { var a = Math.abs(d[i]); if (a > peak) peak = a; var j = Math.abs(d[i] - d[i - 1]); if (j > jump) jump = j; }
+        // the seam: tail of one take overlapping the start of the next
+        for (i = 1; i < d.length - L; i++) { var s1 = d[L + i] + d[i], s0 = d[L + i - 1] + d[i - 1]; seam = Math.max(seam, Math.abs(s1), Math.abs(s1 - s0)); }
+        // clicks: a click is a burst of treble far above the frames around it
+        var F = 128, nf = Math.floor(d.length / F), hf = new Float32Array(nf), worst = 0;
+        for (var f = 0; f < nf; f++) { var e = 0; for (i = Math.max(2, f * F); i < (f + 1) * F; i++) { var y = d[i] - 2 * d[i - 1] + d[i - 2]; e += y * y; } hf[f] = Math.sqrt(e / F); }
+        for (f = 8; f < nf - 8; f++) { var nb = []; for (var k = -8; k <= 8; k++) if (k && Math.abs(k) > 1) nb.push(hf[f + k]); nb.sort(function (p, q) { return p - q; }); var med = nb[nb.length >> 1]; if (med > 1e-4) worst = Math.max(worst, hf[f] / med); }
+        return { clickRatio: +worst.toFixed(1), seconds: +(b.length / RATE).toFixed(1), peakDb: +(20 * Math.log10(peak)).toFixed(2), maxJump: +jump.toFixed(4), seamPeakOrJump: +seam.toFixed(4), rate: RATE };
+      });
     };
     return api;
   })();
@@ -1098,7 +1204,7 @@
 
   if (TEST) window.PS = {
     get puzzle() { return puz; }, get state() { return state; }, get mode() { return mode; }, shareText: shareText, mileShareText: function () { var N = puz.level, ri = rankIndex(N); return mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark"); },
-    get progress() { return prog; }, hint: useHint, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; }, get music() { return { on: prefs.music, vol: prefs.musicVol, playing: music.playing }; }, get markShown() { return markEl ? markEl.dataset.key : null; },
+    get progress() { return prog; }, hint: useHint, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; }, get music() { return { on: prefs.music, vol: prefs.musicVol, playing: music.playing }; }, musicCheck: function () { return music.check(); }, get markShown() { return markEl ? markEl.dataset.key : null; },
     grabPoint: function (pi) { // centre of a cell of pane pi that no other same-axis pane covers
       var p = puz.panes[pi], r = boardEl.getBoundingClientRect(), cells = E.paneCells(p, state.pos[pi]);
       var only = cells.filter(function (c) { return panesAt(c).every(function (q) { return q === pi || puz.panes[q].locked; }); });

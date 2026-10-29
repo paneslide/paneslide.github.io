@@ -409,3 +409,35 @@ html, body, .board, .mini, canvas { forced-color-adjust: none; }
 @keyframes cmbounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
 .cm-arrow.up { animation-name: cmbounceup; }
 @keyframes cmbounceup { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+/* ---------- v7: visual help, button text that always fits ---------- */
+.hgoal { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 8px; font-size: 18px; color: var(--ink); }
+.hgoal span { font-size: 22px; }
+.hdemos { display: flex; justify-content: center; gap: 14px; margin-bottom: 10px; }
+.hd { position: relative; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.hd figcaption { font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.hg { display: grid; grid-template-columns: repeat(3, 26px); gap: 3px; padding: 6px; border-radius: 12px; background: var(--frame2); isolation: isolate; }
+.hg i { width: 26px; height: 26px; border-radius: 7px; background: #E1D8F1; box-shadow: inset 0 3px 3px rgba(60,30,130,.18); }
+.hp { position: absolute; top: 35px; left: 6px; width: 26px; height: 26px; border-radius: 7px; mix-blend-mode: multiply; box-shadow: inset 0 0 0 2px rgba(255,255,255,.9), 0 2px 3px rgba(40,15,90,.3); }
+.hp.c { background: var(--C); } .hp.m { background: var(--M); }
+.hp.fixed { left: 35px; }
+.hp.glide { animation: hglide 3.2s ease-in-out infinite; }
+.hp.stick { animation: hstick 3.2s ease-in-out infinite; }
+.hh { position: absolute; top: 46px; left: 10px; font-size: 22px; z-index: 3; pointer-events: none; }
+.hh.glide { animation: hhand 3.2s ease-in-out infinite; }
+.hh.stick { animation: hhand2 3.2s ease-in-out infinite; }
+@keyframes hglide { 0%, 18% { transform: translateX(0); } 48%, 85% { transform: translateX(58px); } 100% { transform: translateX(0); } }
+@keyframes hstick { 0%, 18% { transform: translateX(0); } 40%, 85% { transform: translateX(29px); } 100% { transform: translateX(0); } }
+@keyframes hhand { 0%, 10% { transform: translateX(0); opacity: 1; } 40% { transform: translateX(40px); opacity: 1; } 52%, 100% { transform: translateX(40px); opacity: 0; } }
+@keyframes hhand2 { 0%, 10% { transform: translateX(0); opacity: 1; } 36% { transform: translateX(29px); opacity: 1; } 48%, 100% { transform: translateX(29px); opacity: 0; } }
+.help-btns { flex-wrap: nowrap; }
+.help-btns .cbtn.big { flex: 1 1 0; min-width: 0; padding: 10px 8px; min-height: 58px; font-size: clamp(17px, 5.4vw, 22px); letter-spacing: .5px; }
+.help-btns #btnReplayTut { flex-grow: 1.35; }
+.cbtn .lbl { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mixes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.mixes span { gap: 3px; font-size: 16px; padding: 6px 4px; min-width: 0; }
+.mixes i { width: 22px; height: 22px; flex: none; } .mixes i.res { width: 26px; height: 26px; }
+.btnrow .cbtn.big { min-width: 0; padding-left: 12px; padding-right: 12px; font-size: clamp(19px, 6.4vw, 28px); gap: 6px; }
+.mixes .swatch { width: 20px !important; height: 20px !important; flex: none; } .mixes .swatch.res { width: 25px !important; height: 25px !important; }
+.btnrow .cbtn.big { padding-left: 8px; padding-right: 8px; letter-spacing: 0; font-size: clamp(18px, 6vw, 28px); }
+.mixes span { gap: 2px; font-size: 15px; padding: 6px 3px; }
