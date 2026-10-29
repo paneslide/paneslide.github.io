@@ -19,7 +19,7 @@
   function rgb(h) { return [1, 3, 5].map(function (i) { return parseInt(h.substr(i, 2), 16); }); }
   function maskColor(m) {
     var c = [255, 255, 255];
-    ["C", "M", "Y"].forEach(function (k) { if (m & E.BIT[k]) { var x = rgb(HEX[k]); c = c.map(function (v, i) { return Math.round(v * x[i] / 255); }); } });
+    ["C", "M", "Y"].forEach(function (k) { if (m & E.BIT[k]) { var x = rgb(HEX[k]); c = c.map(function (v, i) { return Math.min(v, x[i]); }); } }); // same as the board: darkest channel wins
     return "rgb(" + c.join(",") + ")";
   }
   function bitsOf(m) { return ["C", "M", "Y"].filter(function (k) { return m & E.BIT[k]; }); }
@@ -37,7 +37,7 @@
   if (typeof prog.hints !== "number") prog.hints = 3;
   function lvSave() { save("ps2:levels", prog); }
   var HINT_MAX = 5;
-  function parOf(p) { return E.movable(p); }
+  function parOf(p) { return E.parOf(p); }
 
   // ---------- chapters, ranks, tips ----------
   // scene: [sky top, sky mid, sky bottom, far hill, near hill, sun glow, banner light, banner dark]
@@ -65,7 +65,7 @@
   var RANKS = [[5, "Glass Spark"], [10, "Glass Apprentice"], [20, "Pane Pusher"], [30, "Colour Mixer"], [50, "Glass Master"], [75, "Prism Pro"], [100, "Window Wizard"], [150, "Stained-Glass Sage"], [200, "Lightkeeper"], [300, "Grand Glazier"], [500, "PaneSlide Legend"]];
   function rankIndex(cleared) { var i = -1; RANKS.forEach(function (r, k) { if (cleared >= r[0]) i = k; }); return i; }
   function isMilestone(N) { return N === 5 || N % 10 === 0; }
-  var TIPS = { locked: "🔒 Locked glass!", duo: "🎨 Only 2 colours!", free: "✥ Slides any way!", challenge: "🏆 Challenge!", breather: "🌿 Easy one!" };
+  var TIPS = { locked: "🔒 Locked glass stops others!", duo: "🎨 Only 2 colours!", free: "✥ Slides any way!", challenge: "🏆 Challenge!", breather: "🌿 Easy one!", glide: "👆 Swipe: glass glides!", stick: "🧲 Glass sticks on new colour!", order: "🤔 Order matters!" };
 
   var view = "home";
   function showView(v) {
@@ -81,7 +81,7 @@
     b.style.fontSize = String(num).length > 13 ? "15px" : String(num).length > 9 ? "17px" : "";
   }
   var CAL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>';
-  function levelUI(on) { $("btnHint").hidden = !on; $("btnRestart").hidden = !on; $("starLine").hidden = false; }
+  function levelUI(on) { $("btnHint").hidden = !on; $("btnRestart").hidden = !on; $("starLine").hidden = false; $("btnUndo").hidden = !(puz && puz.glide && mode !== "tutorial"); }
   function startHome() {
     hideCoach(true); clearHint(); mode = "home"; locked = true; applyTheme(null);
     var lv = $("playLv"); lv.textContent = "Level " + prog.unlocked;
@@ -94,9 +94,10 @@
   }
   function startDaily() {
     hideCoach(true); applyTheme(null); levelUI(false);
-    mode = "daily"; puz = E.generate(date); n = puz.n; GKEY = "ps2:game:" + date;
+    mode = "daily"; puz = E.generate(date); n = puz.n; GKEY = "ps2:game:" + date; levelUI(false);
     state = load(GKEY, null);
-    if (!state || !Array.isArray(state.pos) || state.pos.length !== puz.panes.length) state = { pos: puz.start.slice(), moves: 0, hist: [], status: "playing" };
+    if (!state || !Array.isArray(state.pos) || state.pos.length !== puz.panes.length || (puz.glide && state.status === "playing" && !E.validState(puz, state.pos))) state = { pos: puz.start.slice(), moves: 0, hist: [], status: "playing" };
+    state.undo = state.undo || [];
     locked = state.status !== "playing";
     setRule("");
     $("btnSkip").hidden = true; $("status").hidden = false;
@@ -106,7 +107,7 @@
   }
   function startTutorial() {
     mode = "tutorial"; puz = E.tutorial(); n = puz.n; GKEY = null;
-    state = { pos: puz.start.slice(), moves: 0, hist: [], status: "playing" }; locked = false;
+    state = { pos: puz.start.slice(), moves: 0, hist: [], undo: [], status: "playing" }; locked = false;
     setRule("");
     $("btnSkip").hidden = false; $("status").hidden = true; levelUI(false); applyTheme(null);
     setBadge("👆", "Tutorial", "1 / 2");
@@ -114,7 +115,7 @@
   }
   function ensureLevels(cb) {
     if (window.PANESLIDE_LEVELS) return cb();
-    var sc = document.createElement("script"); sc.src = "js/levels.js?v=4"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+    var sc = document.createElement("script"); sc.src = "js/levels.js?v=5"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
   }
   function getLevel(N) {
     var D = window.PANESLIDE_LEVELS;
@@ -127,13 +128,14 @@
     ensureLevels(function () {
       hideCoach(true); clearHint();
       mode = "level"; puz = getLevel(N); n = puz.n; GKEY = null; locked = false;
-      state = { pos: puz.start.slice(), moves: 0, hist: [], status: "playing", hinted: false };
+      state = { pos: puz.start.slice(), moves: 0, hist: [], undo: [], status: "playing", hinted: false };
       var ch = chapterOf(N); applyTheme(ch);
       $("btnSkip").hidden = true; $("status").hidden = false; levelUI(true);
       setBadge(puz.challenge ? "🏆" : puz.breather ? "🌿" : ch.icon, "Level", N);
       showView("play"); build(); updateHint(); updateStarLine();
       tipShown = null; setRule("");
-      var key = puz.twist && prog.tips.indexOf(puz.twist) < 0 ? puz.twist : puz.challenge && prog.tips.indexOf("challenge") < 0 ? "challenge" : puz.breather && prog.tips.indexOf("breather") < 0 ? "breather" : null;
+      var intro = N === 1 ? "glide" : N === 2 ? "stick" : N === 3 ? "order" : null;
+      var key = intro && prog.tips.indexOf(intro) < 0 ? intro : puz.twist && prog.tips.indexOf(puz.twist) < 0 ? puz.twist : puz.challenge && prog.tips.indexOf("challenge") < 0 ? "challenge" : puz.breather && prog.tips.indexOf("breather") < 0 ? "breather" : null;
       var tip = key ? TIPS[key] : (N % 20 === 1) ? ch.icon + " " + ch.name + "!" : null;
       if (key) { prog.tips.push(key); lvSave(); }
       if (tip) setTimeout(function () { flashTip(tip, 2800); }, 350);
@@ -143,7 +145,7 @@
 
   // ---------- audio (synthesised, self-made) ----------
   var ac = null;
-  function actx() { if (!ac) { var A = window.AudioContext || window.webkitAudioContext; if (A) ac = new A(); } if (ac && ac.state === "suspended") ac.resume(); return ac; }
+  function actx() { if (!ac) { var A = window.AudioContext || window.webkitAudioContext; if (A) ac = new A(); } if (ac && ac.state === "suspended") { var r = ac.resume(); if (r && r.catch) r.catch(function () {}); } return ac; } // Firefox rejects a pending resume() when you leave the page
   function tone(f, dur, type, vol, when) {
     if (!prefs.sound) return; var a = actx(); if (!a) return;
     var t = a.currentTime + (when || 0), o = a.createOscillator(), g = a.createGain();
@@ -181,22 +183,101 @@
       : '<svg viewBox="0 0 24 24"><path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/></svg>';
   }
 
+  // ---------- painting (canvas) ----------
+  // Every puzzle colour is painted as pixels on a canvas, never as a CSS background. Browser
+  // dark modes and Dark Reader-style extensions recolour CSS backgrounds (that made the board
+  // nearly black on Firefox Android) but leave canvas pixels alone.
+  var boardCv = null, vis = [], glassTiles = [], paintRAF = 0, anims = [];
+  function hiDPI(cv, w, h) { var k = Math.min(window.devicePixelRatio || 1, 3); cv.width = Math.round(w * k); cv.height = Math.round(h * k); cv.style.width = w + "px"; cv.style.height = h + "px"; var x = cv.getContext("2d"); x.setTransform(cv.width / w, 0, 0, cv.height / h, 0, 0); return x; }
+  function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function patternInto(ctx, mask, x, y, s) { // colour-blind patterns, one per colour
+    ctx.save(); rr(ctx, x, y, s, s, s * 0.2); ctx.clip(); ctx.lineWidth = Math.max(1.5, s / 28); ctx.strokeStyle = ctx.fillStyle = "rgba(0,0,0,.28)";
+    if (mask & 1) { ctx.beginPath(); for (var a = -s; a <= s; a += s / 6) { ctx.moveTo(x + a, y + s); ctx.lineTo(x + a + s, y); } ctx.stroke(); }
+    if (mask & 2) { var st = s / 6; for (var py = y + st / 2; py < y + s; py += st) for (var px = x + st / 2; px < x + s; px += st) { ctx.beginPath(); ctx.arc(px, py, st * 0.2, 0, 6.3); ctx.fill(); } }
+    if (mask & 4) { ctx.beginPath(); for (var b = y + s / 8; b < y + s; b += s / 7) { ctx.moveTo(x, b); ctx.lineTo(x + s, b); } ctx.stroke(); }
+    ctx.restore();
+  }
+  function paintSwatch(cv, size, mask) { var x = hiDPI(cv, size, size); x.fillStyle = maskColor(mask); rr(x, 0, 0, size, size, size * 0.24); x.fill(); x.fillStyle = "rgba(255,255,255,.35)"; rr(x, 2, 2, size - 4, size * 0.38, size * 0.18); x.fill(); if (prefs.patterns) patternInto(x, mask, 0, 0, size); }
+  function swatchHTML(mask, cls) { return "<canvas class='swatch" + (cls ? " " + cls : "") + "' data-mask='" + mask + "' aria-hidden='true'></canvas>"; }
+  function paintSwatches(root) { root.querySelectorAll("canvas.swatch").forEach(function (cv) { paintSwatch(cv, cv.classList.contains("res") ? 30 : 24, +cv.dataset.mask); }); }
+  function paintTarget() {
+    var t = $("target"), tc = n <= 3 ? 28 : n === 4 ? 24 : n === 5 ? 21 : 18, g = 3, side = n * tc + (n - 1) * g;
+    t.innerHTML = ""; t.style.gridTemplateColumns = "none";
+    var cv = el("canvas", "tcv", t), x = hiDPI(cv, side + 8, side + 8);
+    x.fillStyle = (getComputedStyle(document.body).getPropertyValue("--frame2") || "").trim() || "#D9CCF7"; rr(x, 0, 0, side + 8, side + 8, 10); x.fill();
+    puz.target.forEach(function (m, k) {
+      var cx = 4 + (k % n) * (tc + g), cy = 4 + Math.floor(k / n) * (tc + g);
+      x.fillStyle = maskColor(m); rr(x, cx, cy, tc, tc, 5); x.fill();
+      if (prefs.patterns && m) patternInto(x, m, cx, cy, tc);
+    });
+    t.setAttribute("role", "img"); t.setAttribute("aria-label", "Target picture, " + n + " by " + n);
+  }
+  function makeTiles() { // one glossy glass tile per colour, composited with "darken" (same colour stays the same)
+    glassTiles = {};
+    ["C", "M", "Y"].forEach(function (k) {
+      var cv = document.createElement("canvas"), x = hiDPI(cv, CELL, CELL);
+      x.fillStyle = HEX[k]; x.fillRect(0, 0, CELL, CELL);
+      var gl = x.createLinearGradient(0, 0, CELL, CELL); gl.addColorStop(0, "rgba(255,255,255,.6)"); gl.addColorStop(0.4, "rgba(255,255,255,0)");
+      x.fillStyle = gl; x.fillRect(0, 0, CELL, CELL); x.fillStyle = "rgba(0,0,0,.06)"; x.fillRect(0, CELL - 4, CELL, 4);
+      glassTiles[k] = cv;
+    });
+  }
+  function drawBoard() {
+    if (!boardCv || !puz) return;
+    var side = PAD * 2 + n * STEP - GAP, x = boardCv.getContext("2d"), k = boardCv.width / side;
+    x.setTransform(k, 0, 0, k, 0, 0); x.globalCompositeOperation = "source-over"; x.clearRect(0, 0, side, side);
+    var fr = x.createLinearGradient(0, 0, 0, side); fr.addColorStop(0, "#F4EFFF"); fr.addColorStop(1, "#D9CCF7");
+    x.fillStyle = fr; rr(x, 0, 0, side, side, 24); x.fill();
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) {
+      x.fillStyle = "#FFFFFF"; rr(x, PAD + c * STEP, PAD + r * STEP, CELL, CELL, 13); x.fill();
+      x.fillStyle = "rgba(40,20,90,.07)"; rr(x, PAD + c * STEP, PAD + r * STEP, CELL, 4, 2); x.fill();
+    }
+    x.globalCompositeOperation = "darken";
+    puz.panes.forEach(function (p, i) {
+      var o = vis[i]; p.cells.forEach(function (cl) {
+        var px = PAD + o[0] + cl[1] * STEP, py = PAD + o[1] + cl[0] * STEP;
+        x.save(); rr(x, px, py, CELL, CELL, 13); x.clip(); x.drawImage(glassTiles[p.color], px, py, CELL, CELL); x.restore();
+      });
+    });
+    x.globalCompositeOperation = "source-over";
+    puz.panes.forEach(function (p, i) {
+      var o = vis[i], focus = paneEls[i] === document.activeElement && !TEST, hinted = hintPi === i;
+      p.cells.forEach(function (cl) {
+        var px = PAD + o[0] + cl[1] * STEP, py = PAD + o[1] + cl[0] * STEP;
+        if (prefs.patterns) patternInto(x, E.BIT[p.color], px, py, CELL);
+        if (p.locked) { x.strokeStyle = "rgba(42,27,77,.3)"; x.lineWidth = 4; rr(x, px + 2, py + 2, CELL - 4, CELL - 4, 11); x.stroke(); }
+        if (focus || hinted) { x.strokeStyle = hinted ? "#FFB800" : "#6A46EA"; x.lineWidth = 4; rr(x, px + 2, py + 2, CELL - 4, CELL - 4, 11); x.stroke(); }
+      });
+    });
+  }
+  function paint() { if (paintRAF) return; paintRAF = requestAnimationFrame(function () { paintRAF = 0; drawBoard(); }); }
+  function easeOut(t) { var c = 1.4; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); } // gentle overshoot, like glass settling
+  // Animate pane pi's picture from its current spot to offset `to` (also moves its arrow).
+  function animateTo(pi, to, ms, done, bounceBack) {
+    var from = vis[pi].slice(), t0 = performance.now(), id = {};
+    anims.push(id);
+    (function frame(now) {
+      var t = Math.min(1, (now - t0) / ms), e = bounceBack ? Math.sin(t * Math.PI) : easeOut(t);
+      vis[pi] = [from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e];
+      moveGrip(pi); drawBoard();
+      if (t < 1) requestAnimationFrame(frame);
+      else { if (bounceBack) vis[pi] = from; else vis[pi] = to.slice(); puz.panes.forEach(function (q, i) { moveGrip(i); }); drawBoard(); anims.splice(anims.indexOf(id), 1); if (done) done(); }
+    })(t0);
+  }
+  function moveGrip(pi) { var p = puz.panes[pi], hc = p.cells[gripAt[pi]] || gripCell(p); gripEls[pi].style.transform = "translate(" + (PAD + vis[pi][0] + hc[1] * STEP) + "px," + (PAD + vis[pi][1] + hc[0] * STEP) + "px)"; }
+
   function build() {
     measure();
     document.body.classList.toggle("patterns", !!prefs.patterns);
     $("par").textContent = parOf(puz);
-    // target
-    var t = $("target"); t.innerHTML = "";
-    var tc = n <= 3 ? 28 : n === 4 ? 24 : n === 5 ? 21 : 18;
-    t.style.gridTemplateColumns = "repeat(" + n + ", " + tc + "px)";
-    puz.target.forEach(function (m) {
-      var c = el("div", "c", t); c.style.width = c.style.height = tc + "px";
-      bitsOf(m).forEach(function (k) { var l = el("i", "lay " + k, c); l.style.backgroundColor = HEX[k]; });
-    });
+    paintTarget(); makeTiles();
     // board
     boardEl = $("board"); boardEl.innerHTML = ""; boardEl.classList.remove("won");
-    var wells = el("div", "wells", boardEl); wells.style.gridTemplateColumns = "repeat(" + n + ", " + CELL + "px)";
-    for (var i = 0; i < n * n; i++) el("div", "well", wells);
+    boardEl.setAttribute("aria-label", puz.glide ? "Window. Swipe a glass pane: it glides until it bumps the edge or glass going the same way, or sticks where it slides onto new colour." : "Window. Drag the glass panes.");
+    var side = PAD * 2 + n * STEP - GAP;
+    boardCv = el("canvas", "bcv", boardEl); hiDPI(boardCv, side, side); boardCv.setAttribute("aria-hidden", "true");
+    boardEl.style.width = boardEl.style.height = side + "px";
+    vis = puz.panes.map(function (p, i) { return offset(p, state.pos[i]); });
     trackEl = el("div", "track", boardEl);
     paneEls = []; gripEls = [];
     puz.panes.forEach(function (p, pi) {
@@ -204,21 +285,22 @@
       pe.setAttribute("role", "button");
       pe.setAttribute("aria-label", NAME[p.color] + " glass, " + (p.locked ? "locked in place" : "slides " + (p.axis === "h" ? "left and right" : p.axis === "v" ? "up and down" : "any direction") + ". Use arrow keys."));
       if (p.locked) pe.classList.add("locked");
-      pe.style.setProperty("--pc", HEX[p.color]);
-      p.cells.forEach(function (c) { var g = el("div", "g " + p.color, pe); g.style.left = c[1] * STEP + "px"; g.style.top = c[0] * STEP + "px"; });
+      pe.style.width = p.w * STEP - GAP + "px"; pe.style.height = p.h * STEP - GAP + "px";
       pe.addEventListener("keydown", function (e) { keyMove(e, pi); });
+      pe.addEventListener("focus", paint); pe.addEventListener("blur", paint);
       paneEls.push(pe);
       var gr = el("div", "grip" + (p.locked ? " lock" : ""), boardEl); gr.innerHTML = p.locked ? LOCK_SVG : arrowSVG(p.axis); gripEls.push(gr);
     });
     puz.panes.forEach(function (p, pi) { place(pi, state.pos[pi]); });
     el("div", "sparkle", boardEl);
-    updateMoves(false);
+    updateMoves(false); updateUndo(); drawBoard();
   }
   var gripAt = []; // shape-cell index each pane's arrow sits on
-  function place(pi, pos) {
+  function place(pi, pos, ms) {
     var p = puz.panes[pi], o = offset(p, pos);
     paneEls[pi].style.transform = "translate(" + o[0] + "px," + o[1] + "px)";
     placeGrips();
+    if (ms) animateTo(pi, o, ms); else { vis[pi] = o; puz.panes.forEach(function (q, i) { moveGrip(i); }); paint(); }
   }
   // Put each pane's arrow on its least-covered cell, never on the same cell as another arrow.
   function placeGrips() {
@@ -232,7 +314,6 @@
         return ((taken[ka] ? 100 : 0) + cover[ka] * 10 + Math.abs(p.cells[a][0] - cr) + Math.abs(p.cells[a][1] - cc)) - ((taken[kb] ? 100 : 0) + cover[kb] * 10 + Math.abs(p.cells[b][0] - cr) + Math.abs(p.cells[b][1] - cc));
       });
       var j = order[0], c = cells[j]; taken[c[0] * n + c[1]] = 1; gripAt[i] = j;
-      gripEls[i].style.transform = "translate(" + (PAD + c[1] * STEP) + "px," + (PAD + c[0] * STEP) + "px)";
     });
   }
   function gripCell(p) { // the shape cell nearest the middle of the pane
@@ -272,6 +353,15 @@
   function onMove(e) {
     if (!drag || e.pointerId !== drag.id) return;
     var dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+    if (drag.pi === null && puz.glide) { // glide rules: one swipe = one glide, no free placement
+      if (Math.abs(dx) + Math.abs(dy) < 12) return;
+      var wantG = Math.abs(dx) > Math.abs(dy) ? "h" : "v", dirG = (wantG === "h" ? dx : dy) > 0 ? 1 : -1, d0 = drag; drag = null;
+      var freeG = d0.cands.filter(function (pi) { return !puz.panes[pi].locked; });
+      if (!freeG.length) { toast("🔒"); buzz([8, 30, 8]); return; }
+      var hit = freeG.filter(function (pi) { return puz.panes[pi].axis === wantG; })[0];
+      if (hit == null) { nudgeHint(freeG[freeG.length - 1]); return; }
+      swipe(hit, dirG); return;
+    }
     if (drag.pi === null) {
       if (Math.abs(dx) + Math.abs(dy) < 6) return;
       var want = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
@@ -295,6 +385,7 @@
       snap = cl(Math.round(f), 0, p.max);
     }
     paneEls[drag.pi].style.transform = "translate(" + fo[0] + "px," + fo[1] + "px)";
+    vis[drag.pi] = fo; paint();
     var hc = p.cells[gripAt[drag.pi]] || gripCell(p);
     gripEls[drag.pi].style.transform = "translate(" + (PAD + fo[0] + hc[1] * STEP) + "px," + (PAD + fo[1] + hc[0] * STEP) + "px)";
     if (snap !== drag.last) { drag.last = snap; sfx.step(); }
@@ -310,6 +401,10 @@
   function keyMove(e, pi) {
     if (locked) return; var p = puz.panes[pi], k = e.key, v = state.pos[pi];
     if (p.locked) return;
+    if (puz.glide) {
+      var d = p.axis === "h" ? (k === "ArrowRight" ? 1 : k === "ArrowLeft" ? -1 : 0) : (k === "ArrowDown" ? 1 : k === "ArrowUp" ? -1 : 0);
+      if (!d) return; e.preventDefault(); swipe(pi, d); return;
+    }
     if (p.axis === "b") {
       var r = Math.floor(v / (p.mc + 1)), c = v % (p.mc + 1), mr = Math.floor(p.max / (p.mc + 1));
       if (k === "ArrowLeft") c--; else if (k === "ArrowRight") c++; else if (k === "ArrowUp") r--; else if (k === "ArrowDown") r++; else return;
@@ -324,14 +419,41 @@
   function nudgeHint(pi) { // a tap without a drag: wiggle the pane along its track
     if (puz.panes[pi].locked) { toast("🔒"); buzz([8, 30, 8]); return; }
     if (puz.panes[pi].axis === "b") { toast("✥ Drag"); return; }
-    var p = puz.panes[pi], o = offset(p, state.pos[pi]), dx = p.axis === "h" ? 8 : 0, dy = p.axis === "v" ? 8 : 0;
-    paneEls[pi].animate([{ transform: "translate(" + o[0] + "px," + o[1] + "px)" }, { transform: "translate(" + (o[0] + dx) + "px," + (o[1] + dy) + "px)" }, { transform: "translate(" + (o[0] - dx) + "px," + (o[1] - dy) + "px)" }, { transform: "translate(" + o[0] + "px," + o[1] + "px)" }], { duration: 360 });
-    toast(p.axis === "h" ? "↔ Drag" : "↕ Drag");
+    var p = puz.panes[pi], o = vis[pi], dx = p.axis === "h" ? 8 : 0, dy = p.axis === "v" ? 8 : 0;
+    if (!anims.length) animateTo(pi, [o[0] + dx, o[1] + dy], 260, null, true);
+    toast(p.axis === "h" ? (puz.glide ? "↔ Swipe" : "↔ Drag") : (puz.glide ? "↕ Swipe" : "↕ Drag"));
   }
-  function commit(pi, pos) {
-    var moved = pos !== state.pos[pi], before = E.render(puz, state.pos);
-    state.pos[pi] = pos; place(pi, pos);
+  // One swipe: the pane glides to where the rules stop it. A blocked swipe is a free bump.
+  function swipe(pi, d) {
+    if (locked || anims.length) return;
+    var p = puz.panes[pi], to = E.glideTo(puz, state.pos, pi, d);
+    hideCoach(false);
+    if (to === state.pos[pi]) {
+      var o = vis[pi], b = 0.12 * STEP * d;
+      animateTo(pi, p.axis === "h" ? [o[0] + b, o[1]] : [o[0], o[1] + b], 180, null, true);
+      sfx.step(); buzz(6);
+      if (mode === "tutorial") setTimeout(coachTutorial, 300);
+      return;
+    }
+    var k = Math.abs(to - state.pos[pi]);
+    commit(pi, to, 120 + 60 * k);
+  }
+  function updateUndo() { var b = $("btnUndo"); if (b) b.classList.toggle("empty", !(state && state.undo && state.undo.length) || locked); }
+  function undo() {
+    if (locked || anims.length || !state.undo || !state.undo.length) return;
+    var prev = state.undo.pop(), pi = -1;
+    prev.forEach(function (v, i) { if (v !== state.pos[i]) pi = i; });
+    state.pos = prev.slice(); clearHint();
+    if (pi >= 0) place(pi, prev[pi], 200);
+    sfx.tap(); buzz(6); updateUndo();
+    if (mode === "daily") save(GKEY, state);
+    if (mode === "level" || mode === "daily") updateStarLine();
+  }
+  function commit(pi, pos, ms) {
+    var moved = pos !== state.pos[pi], before = E.render(puz, state.pos), prevPos = state.pos.slice();
+    state.pos[pi] = pos; place(pi, pos, moved ? ms : 0);
     if (!moved) return;
+    if (puz.glide) { state.undo = state.undo || []; state.undo.push(prevPos); if (state.undo.length > 60) state.undo.shift(); }
     sfx.drop(); buzz(8);
     var pe = paneEls[pi]; pe.classList.remove("squish"); void pe.offsetWidth; pe.classList.add("squish");
     boardEl.classList.remove("bump"); void boardEl.offsetWidth; boardEl.classList.add("bump");
@@ -340,13 +462,14 @@
     if (mode === "daily") save(GKEY, state);
     if (mode === "level") {
       if (tipShown) { tipShown = null; setRule(""); }
-      if (hintPi === pi) clearHint(); updateStarLine();
+      if (hintPi === pi || puz.glide) clearHint(); updateStarLine();
     }
-    var img = E.render(puz, state.pos);
-    sparkleMixes(before, img);
-    showNewMix(img);
-    if (E.diffCount(img, puz.target) === 0) win();
-    else if (mode === "tutorial") setTimeout(coachTutorial, 250);
+    updateUndo();
+    var img = E.render(puz, state.pos), fx = function () { sparkleMixes(before, img); showNewMix(img); };
+    if (ms) setTimeout(fx, ms * 0.8); else fx();
+    if (E.diffCount(img, puz.target) === 0) { if (ms) { locked = true; setTimeout(win, ms); } else win(); }
+    else if (mode === "tutorial") setTimeout(coachTutorial, (ms || 0) + 250);
+    else if (puz.glide && E.distOf(puz, state.pos) < 0) setTimeout(function () { if (state.status === "playing") flashTip("↶ Stuck! Undo", 2600); }, (ms || 0) + 150);
   }
   function updateMoves(bounce) {
     var m = $("moves"); m.textContent = state.moves;
@@ -381,20 +504,21 @@
     if (!found) return;
     seen.push(found); prefs.mixSeen = seen; save("ps2:prefs", prefs);
     var chip = $("mixChip"), parts = bitsOf(found);
-    chip.innerHTML = parts.map(function (k) { return "<i style='background:" + HEX[k] + "'></i>"; }).join("+") + "=<i class='res' style='background:" + maskColor(found) + "'></i>";
+    chip.innerHTML = parts.map(function (k) { return swatchHTML(E.BIT[k]); }).join("+") + "=" + swatchHTML(found, "res"); paintSwatches(chip);
     chip.setAttribute("aria-label", parts.map(function (k) { return NAME[k]; }).join(" + ") + " make " + MIXNAME[found].toLowerCase());
     chip.hidden = false; clearTimeout(chipT); chipT = setTimeout(function () { chip.hidden = true; }, 3200);
   }
 
   // ---------- tutorial coach ----------
   var handEl = null, handAnim = null;
-  function coachAt(pi, text) {
+  function coachAt(pi, text, toPos) {
     var p = puz.panes[pi], o = offset(p, state.pos[pi]), hc = p.cells[gripAt[pi]] || gripCell(p);
+    if (toPos == null) toPos = puz.solution[pi];
     var x = PAD + o[0] + hc[1] * STEP + CELL / 2, y = PAD + o[1] + hc[0] * STEP;
     setRule(text);
     if (!handEl) { handEl = el("div", "hand", document.querySelector(".stage-wrap")); handEl.textContent = "👆"; }
     handEl.hidden = false;
-    var dir = state.pos[pi] < puz.solution[pi] ? 1 : -1, dist = STEP * Math.abs(puz.solution[pi] - state.pos[pi]);
+    var dir = state.pos[pi] < toPos ? 1 : -1, dist = STEP * Math.abs(toPos - state.pos[pi]);
     handEl.style.left = (x - 14) + "px"; handEl.style.top = (y + CELL / 2 - 6) + "px";
     if (handAnim) handAnim.cancel();
     var to = p.axis === "h" ? "translate(" + dir * dist + "px,0)" : "translate(0," + dir * dist + "px)";
@@ -403,6 +527,16 @@
   function hideCoach(all) { setRule(""); if (handEl) handEl.hidden = true; if (handAnim) handAnim.cancel(); if (all) handAnim = null; }
   function coachTutorial() {
     if (mode !== "tutorial" || state.status !== "playing") return;
+    if (puz.glide) {
+      if (locked || anims.length) return; // a glide is still running (or the win is on its way)
+      var m = E.nextMove(puz, state.pos);
+      if (!m && E.distOf(puz, state.pos) === 0) return;
+      if (!m) { state.pos = puz.start.slice(); state.moves = 0; state.undo = []; build(); m = E.nextMove(puz, state.pos); }
+      var arrow = puz.panes[m.pane].axis === "h" ? (m.dir > 0 ? "→" : "←") : (m.dir > 0 ? "↓" : "↑");
+      var sticks = m.to > 0 && m.to < puz.panes[m.pane].max;
+      var step = E.distOf(puz, state.pos) >= 2 ? 1 : 2; setBadge("👆", "Tutorial", step + " / 2");
+      coachAt(m.pane, sticks ? "Swipe " + arrow + " · it sticks on glass!" : "Swipe " + arrow + " · glass glides!", m.to); return;
+    }
     if (state.pos[0] !== 1) { setBadge("👆", "Tutorial", "1 / 2"); coachAt(0, state.pos[0] < 1 ? "Slide →" : "Back ←"); }
     else if (state.pos[1] !== 1) { setBadge("👆", "Tutorial", "2 / 2"); coachAt(1, state.pos[1] > 1 ? "Slide ↑ to mix!" : "Down ↓"); }
   }
@@ -444,7 +578,7 @@
     if (mode === "tutorial") {
       $("endTitle").textContent = "You got it!";
       $("endStars").innerHTML = starsHTML(3, "pop"); playStars(3);
-      $("endStats").innerHTML = "<span class='stat'><i class='mx' style='background:" + HEX.C + "'></i>+<i class='mx' style='background:" + HEX.M + "'></i>=<i class='mx' style='background:" + maskColor(3) + "'></i></span>";
+      $("endStats").innerHTML = "<span class='stat'>" + swatchHTML(1, "mx") + "+" + swatchHTML(2, "mx") + "=" + swatchHTML(3, "mx") + "</span>"; paintSwatches($("endStats"));
       $("endMainLbl").textContent = "PLAY"; $("btnShare").hidden = true; $("btnEndHome").hidden = true; d.showModal(); return;
     }
     $("btnShare").hidden = false; $("btnEndHome").hidden = false; $("endMainLbl").textContent = "LEVELS";
@@ -483,7 +617,7 @@
   }
   function onShareBtn() { shareOut(shareText()); }
   function onEndMain() {
-    if (mode === "tutorial") { prefs.tutDone = true; save("ps2:prefs", prefs); $("dlgEnd").close(); startDaily(); return; }
+    if (mode === "tutorial") { prefs.tutDone = true; prefs.glideTut = true; save("ps2:prefs", prefs); $("dlgEnd").close(); startDaily(); return; }
     $("dlgEnd").close(); openMap();
   }
   function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 1700); }
@@ -502,10 +636,11 @@
   }
   function updateHint() { $("hintCount").textContent = prog.hints; $("btnHint").classList.toggle("empty", prog.hints <= 0); }
   var hintPi = null, ghostEl = null;
-  function clearHint() { hintPi = null; if (ghostEl) { ghostEl.remove(); ghostEl = null; } paneEls.forEach(function (e) { e.classList.remove("hinted"); }); }
+  function clearHint() { var had = hintPi !== null; hintPi = null; if (ghostEl) { ghostEl.remove(); ghostEl = null; } paneEls.forEach(function (e) { e.classList.remove("hinted"); }); if (had) { paint(); if (tipShown && tipShown.indexOf("💡") === 0) { tipShown = null; setRule(""); } } }
   function useHint() {
     if (mode !== "level" || locked) return;
     if (hintPi !== null) return;
+    if (puz.glide) return useGlideHint();
     if (prog.hints <= 0) { toast("💡 0 · earn ⭐⭐⭐"); buzz([8, 30, 8]); return; }
     var cand = puz.panes.map(function (p, i) { return i; }).filter(function (i) { return !puz.panes[i].locked && state.pos[i] !== puz.solution[i]; });
     if (!cand.length) return;
@@ -517,6 +652,21 @@
     p.cells.forEach(function (c) { var g = el("div", "gc", ghostEl); g.style.left = PAD + o[0] + c[1] * STEP + "px"; g.style.top = PAD + o[1] + c[0] * STEP + "px"; g.style.borderColor = HEX[p.color]; });
     paneEls[pi].classList.add("hinted"); paneEls[pi].style.zIndex = ++zTop;
     flashTip("💡 Here!", 0); sfx.mix(); buzz(10);
+  }
+  // Glide hint: the next best swipe (from a full search), shown as a ghost where it will stop.
+  function useGlideHint() {
+    if (anims.length) return;
+    var m = E.nextMove(puz, state.pos);
+    if (!m) { if (E.distOf(puz, state.pos) < 0) { flashTip("↶ Undo first", 2200); buzz([8, 30, 8]); } return; }
+    if (prog.hints <= 0) { toast("💡 0 · earn ⭐⭐⭐"); buzz([8, 30, 8]); return; }
+    var p = puz.panes[m.pane];
+    prog.hints--; lvSave(); updateHint();
+    state.hinted = true; hintPi = m.pane; updateStarLine();
+    ghostEl = el("div", "ghost", boardEl);
+    var o = offset(p, m.to);
+    p.cells.forEach(function (c) { var g = el("div", "gc", ghostEl); g.style.left = PAD + o[0] + c[1] * STEP + "px"; g.style.top = PAD + o[1] + c[0] * STEP + "px"; g.style.borderColor = HEX[p.color]; });
+    paint();
+    flashTip("💡 Swipe " + (p.axis === "h" ? (m.dir > 0 ? "→" : "←") : (m.dir > 0 ? "↓" : "↑")), 0); sfx.mix(); buzz(10);
   }
   function recordLevel() {
     var N = puz.level, st = starsFor(state.moves, state.hinted), prev = prog.stars[N] || 0, firstClear = N >= prog.unlocked, gained = [];
@@ -606,7 +756,12 @@
     }
     $("hudStars").textContent = totalStars();
     $("playNextN").textContent = prog.unlocked;
-    requestAnimationFrame(function () { drawRoad(path, nodes); if (cur) { var r = cur.getBoundingClientRect(); window.scrollTo(0, Math.max(0, window.scrollY + r.top - window.innerHeight * 0.5)); } });
+    requestAnimationFrame(function () {
+      path.style.paddingBottom = $("mapBar").offsetHeight + 34 + "px"; // last node always clears the PLAY bar
+      drawRoad(path, nodes);
+      if (cur) { var r = cur.getBoundingClientRect(), bar = $("mapBar").getBoundingClientRect(), top = $("hud").getBoundingClientRect().bottom;
+        window.scrollTo(0, Math.max(0, window.scrollY + r.top + r.height / 2 - (top + (bar.top - top) * 0.55))); } // middle of the visible part, above the PLAY bar
+    });
   }
   function drawRoad(path, nodes) {
     var pr = path.getBoundingClientRect(), pts = nodes.map(function (b) { var r = b.getBoundingClientRect(); return [r.left - pr.left + r.width / 2, r.top - pr.top + r.height / 2]; });
@@ -642,7 +797,7 @@
 
   // ---------- wiring ----------
   function openHelp() {
-    $("mixList").innerHTML = [3, 6, 5, 7].map(function (m) { return "<span aria-label='" + MIXNAME[m] + "'>" + bitsOf(m).map(function (k) { return "<i style='background:" + HEX[k] + "'></i>"; }).join("+") + "=<i class='res' style='background:" + maskColor(m) + "'></i></span>"; }).join("");
+    $("mixList").innerHTML = [3, 6, 5, 7].map(function (m) { return "<span aria-label='" + MIXNAME[m] + "'>" + bitsOf(m).map(function (k) { return swatchHTML(E.BIT[k]); }).join("+") + "=" + swatchHTML(m, "res") + "</span>"; }).join(""); paintSwatches($("mixList"));
     document.querySelector("#dlgHelp .st3").innerHTML = starsHTML(3); document.querySelectorAll("#dlgHelp .st2").forEach(function (x) { x.innerHTML = starsHTML(2); });
     $("dlgHelp").showModal();
   }
@@ -655,14 +810,14 @@
     document.addEventListener("pointerdown", function (e) { var t = e.target.closest && e.target.closest(".cbtn, .tgl, .node"); if (t && !t.disabled) { actx(); sfx.tap(); buzz(6); } }, true);
     document.querySelectorAll("dialog [data-close]").forEach(function (x) { x.addEventListener("click", function () { x.closest("dialog").close(); }); });
     document.querySelectorAll("dialog").forEach(function (d) { d.addEventListener("click", function (e) { if (e.target === d) d.close(); }); });
-    $("dlgEnd").addEventListener("close", function () { if (mode === "tutorial" && state.status === "won") { prefs.tutDone = true; save("ps2:prefs", prefs); startDaily(); } });
+    $("dlgEnd").addEventListener("close", function () { if (mode === "tutorial" && state.status === "won") { prefs.tutDone = true; prefs.glideTut = true; save("ps2:prefs", prefs); startDaily(); } });
     $("btnHelp").addEventListener("click", openHelp); $("btnHelp2").addEventListener("click", openHelp);
     $("btnReplayTut").addEventListener("click", function () { $("dlgHelp").close(); startTutorial(); });
     $("btnStats").addEventListener("click", function () { $("statsBody").innerHTML = statsHTML(-1); $("dlgStats").showModal(); });
     $("btnSettings").addEventListener("click", openSettings); $("btnHomeSettings").addEventListener("click", openSettings);
     $("optSound").addEventListener("change", function () { prefs.sound = this.checked; save("ps2:prefs", prefs); syncToggles(); if (prefs.sound) sfx.drop(); });
     $("optVibe").addEventListener("change", function () { prefs.vibe = this.checked; save("ps2:prefs", prefs); syncToggles(); buzz(20); });
-    $("optPatterns").addEventListener("change", function () { prefs.patterns = this.checked; save("ps2:prefs", prefs); syncToggles(); document.body.classList.toggle("patterns", prefs.patterns); });
+    $("optPatterns").addEventListener("change", function () { prefs.patterns = this.checked; save("ps2:prefs", prefs); syncToggles(); document.body.classList.toggle("patterns", prefs.patterns); if (puz && boardCv) { paintTarget(); drawBoard(); } });
     $("btnShare").addEventListener("click", onShareBtn);
     $("btnEndMain").addEventListener("click", onEndMain);
     $("btnEndHome").addEventListener("click", function () { $("dlgEnd").close(); startHome(); });
@@ -678,13 +833,14 @@
     $("btnLvShare").addEventListener("click", function () { shareOut("PaneSlide Level " + puz.level + " " + "⭐".repeat(lastStars) + "\n" + SITE); });
     $("btnMileNext").addEventListener("click", function () { $("dlgMile").close(); startLevel(puz.level + 1); });
     $("btnMileShare").addEventListener("click", function () { var N = puz.level, ri = rankIndex(N); shareOut(mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark")); });
-    $("btnSkip").addEventListener("click", function () { prefs.tutDone = true; save("ps2:prefs", prefs); hideCoach(true); startDaily(); });
-    var rz; window.addEventListener("resize", function () { clearTimeout(rz); rz = setTimeout(function () { if (mode === "map" || mode === "home") return; clearHint(); build(); if (mode === "tutorial") coachTutorial(); }, 150); });
+    $("btnSkip").addEventListener("click", function () { prefs.tutDone = true; prefs.glideTut = true; save("ps2:prefs", prefs); hideCoach(true); startDaily(); });
+    $("btnUndo").addEventListener("click", undo);
+    var rz; window.addEventListener("resize", function () { clearTimeout(rz); rz = setTimeout(function () { if (mode === "map" || mode === "home" || anims.length) return; clearHint(); build(); if (mode === "tutorial") coachTutorial(); }, 150); });
   }
 
   wire();
   var qLevel = parseInt(qs.get("level"), 10);
-  if (!prefs.tutDone && !practice && qs.get("tutorial") !== "0") startTutorial();
+  if ((!prefs.tutDone || !prefs.glideTut) && !practice && qs.get("tutorial") !== "0") startTutorial(); // the new glide rules get a one-time tutorial, even for old players
   else if (qLevel >= 1 && (qLevel <= prog.unlocked || TEST)) startLevel(qLevel);
   else if (qs.get("mode") === "levels" || qLevel) openMap();
   else if (qs.get("mode") === "daily" || practice) startDaily();
@@ -692,7 +848,7 @@
 
   if (TEST) window.PS = {
     get puzzle() { return puz; }, get state() { return state; }, get mode() { return mode; }, shareText: shareText, mileShareText: function () { var N = puz.level, ri = rankIndex(N); return mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark"); },
-    get progress() { return prog; }, hint: useHint,
+    get progress() { return prog; }, hint: useHint, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; },
     grabPoint: function (pi) { // centre of a cell of pane pi that no other same-axis pane covers
       var p = puz.panes[pi], r = boardEl.getBoundingClientRect(), cells = E.paneCells(p, state.pos[pi]);
       var only = cells.filter(function (c) { return panesAt(c).every(function (q) { return q === pi || puz.panes[q].locked; }); });

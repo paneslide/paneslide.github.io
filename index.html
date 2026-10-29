@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="only light">
+<meta name="darkreader-lock">
 <meta name="theme-color" content="#3B1F7A">
 <title>PaneSlide · slide the glass, copy the picture</title>
 <meta name="description" content="PaneSlide is a free colour-glass sliding puzzle game. Slide glass panes so the window matches the picture. Where glass overlaps, colours mix. A new daily puzzle plus endless levels.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preload" href="fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=4">
+<link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
 <div class="scene" id="scene" aria-hidden="true">
@@ -43,7 +44,7 @@
 
  <section id="mapView" class="map" hidden>
   <div class="path" id="mapPath"></div>
-  <button class="cbtn big green dock" id="btnPlayNext"><span class="lbl">▶</span> <b id="playNextN">1</b></button>
+  <div class="mapbar" id="mapBar"><button class="cbtn big green" id="btnPlayNext"><span class="lbl">▶</span> <b id="playNextN">1</b></button></div>
  </section>
 
  <div id="playView" class="play" hidden>
@@ -53,7 +54,7 @@
   </section>
   <section class="stage-wrap">
     <div id="rule" class="tip" role="status" aria-live="polite"></div>
-    <div id="board" class="board" aria-label="Window. Drag the glass panes."></div>
+    <div id="board" class="board" aria-label="Window. Swipe the glass panes."></div>
     <div id="mixChip" class="mix-chip" hidden></div>
   </section>
   <section class="meter" id="status" aria-label="Moves and par">
@@ -64,6 +65,7 @@
   <div class="actions">
     <button class="cbtn round purple" id="btnHelp2" aria-label="How to play"><b>?</b></button>
     <button class="cbtn round white" id="btnRestart" aria-label="Restart level" hidden><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v5h5"/></svg></button>
+    <button class="cbtn round white" id="btnUndo" aria-label="Undo last move" hidden><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
     <button class="cbtn round gold hintb" id="btnHint" aria-label="Use a hint" hidden><svg viewBox="0 0 24 24" class="fill"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Zm-3 17h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 20.5V19Z"/></svg><em id="hintCount">3</em></button>
     <button class="cbtn round white" id="btnSkip" aria-label="Skip tutorial" hidden><svg viewBox="0 0 24 24"><path d="M5 5l8 7-8 7M14 5l5 7-5 7"/></svg></button>
   </div>
@@ -82,6 +84,11 @@
     <div class="dp dm"></div><div class="dp dc"></div><div class="dhand">👆</div>
     <div class="dgoal"><i></i><i class="b"></i><i class="m"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   </div>
+  <ul class="glide-rules">
+    <li><b>👆</b><span>Swipe glass. It glides to the edge, or to glass going the same way…</span></li>
+    <li><b>🧲</b><span>…or <em>sticks</em> as soon as it slides onto new colour.</span></li>
+    <li><b>↶</b><span>Order matters. Undo any time.</span></li>
+  </ul>
   <div class="mixes" id="mixList"></div>
   <div class="rules">
     <div><span class="st3"></span><i class="ico flag"></i></div>
@@ -145,7 +152,7 @@
   </div>
 </dialog>
 
-<script src="js/engine.js?v=4"></script>
-<script src="js/game.js?v=4"></script>
+<script src="js/engine.js?v=5"></script>
+<script src="js/game.js?v=5"></script>
 </body>
 </html>

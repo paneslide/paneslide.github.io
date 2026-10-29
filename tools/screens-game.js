@@ -1,14 +1,26 @@
-// Gamified UI test: light, prefers-dark and Chrome forced-dark at 390x844.
-// Flow: tutorial -> daily -> win -> levels map -> level win -> milestone, plus help/settings/stats.
-const { chromium } = require(process.env.PW || "playwright-core");
+// Gamified UI test at 390x844: Chromium light, prefers-dark, forced-dark, Firefox dark, and a
+// Dark Reader simulation. Flow: tutorial -> daily -> levels map -> levels (solved by real swipes
+// along the shortest route), undo, hint, map bottom. Fails on any console error.
+// Usage: node tools/screens-game.js [baseUrl]   (env PW = path to playwright-core, ONLY = one run)
+const pw = require(process.env.PW || "playwright-core");
 const base = process.argv[2] || "http://127.0.0.1:8765/";
 const out = __dirname + "/../screenshots/";
 const errors = [];
 function watch(page, tag) {
-  page.on("console", m => { if (m.type() === "error" || m.type() === "warning") errors.push(tag + " " + m.type() + ": " + m.text()); });
+  page.on("console", m => { if (m.type() === "error" || m.type() === "warning") errors.push(tag + " " + m.type() + ": " + m.text() + (process.env.DBG ? " @" + JSON.stringify(m.location()) + " " + page.url() : "")); });
   page.on("pageerror", e => errors.push(tag + " pageerror: " + e.message));
   page.on("requestfailed", r => errors.push(tag + " requestfailed: " + r.url()));
 }
+async function idle(page) { await page.waitForFunction(() => !PS.busy, null, { timeout: 4000 }); await page.waitForTimeout(60); }
+async function swipe(page, pi, dir) { // real pointer swipe on a cell of pane pi
+  const g = await page.evaluate(i => { const p = PS.puzzle.panes[i], c = PS.E.paneCells(p, PS.state.pos[i])[0]; return Object.assign(PS.cellPoint(c[0], c[1]), { axis: p.axis }); }, pi);
+  const d = 40 * dir, before = await page.evaluate(() => PS.state.moves);
+  await page.mouse.move(g.x, g.y); await page.mouse.down();
+  await page.mouse.move(g.x + (g.axis === "h" ? d : 0), g.y + (g.axis === "v" ? d : 0), { steps: 6 });
+  await page.mouse.up(); await idle(page);
+  return (await page.evaluate(() => PS.state.moves)) - before;
+}
+// Classic (drag) rules: practice dailies before the switch date still use them.
 async function drag(page, pi, to) {
   const g = await page.evaluate(i => PS.grabPoint(i), pi);
   const from = await page.evaluate(i => PS.state.pos[i], pi);
@@ -21,7 +33,7 @@ async function drag(page, pi, to) {
   const now = await page.evaluate(i => PS.state.pos[i], pi);
   if (now !== to) throw new Error(`drag pane ${pi} to ${to} landed at ${now}`);
 }
-async function solve(page) {
+async function solveClassic(page) {
   // A pane can be hidden under a same-direction pane that was moved later, so pick an order of
   // moves (like a careful player) in which every pane is still grabbable when its turn comes.
   const order = await page.evaluate(() => {
@@ -50,111 +62,91 @@ async function solve(page) {
   if (!order) throw new Error("no grabbable move order for level " + await page.evaluate(() => PS.puzzle.level));
   for (const i of order) await drag(page, i, await page.evaluate(k => PS.puzzle.solution[k], i));
 }
-async function run(browser, tag, ctxOpts, full) {
-  const ctx = await browser.newContext(Object.assign({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, permissions: ["clipboard-read", "clipboard-write"] }, ctxOpts));
+async function solve(page) { // follow the shortest route, one real swipe at a time
+  if (!(await page.evaluate(() => PS.puzzle.glide))) return solveClassic(page);
+  for (let k = 0; k < 30; k++) {
+    const st = await page.evaluate(() => PS.state.status); if (st !== "playing") return;
+    const m = await page.evaluate(() => PS.E.nextMove(PS.puzzle, PS.state.pos));
+    if (!m) return;
+    const moved = await swipe(page, m.pane, m.dir);
+    const pos = await page.evaluate(i => PS.state.pos[i], m.pane);
+    if (!moved || pos !== m.to) throw new Error(`swipe pane ${m.pane} dir ${m.dir} expected ${m.to}, got ${pos} (moved ${moved})`);
+  }
+}
+async function colourCheck(page, tag) { // the puzzle must keep its true colours: sample board + target canvases
+  return page.evaluate(() => {
+    const cv = document.querySelector("#board canvas"), x = cv.getContext("2d"), d = x.getImageData(0, 0, cv.width, cv.height).data;
+    let dark = 0, tot = 0; for (let i = 0; i < d.length; i += 4 * 97) { tot++; if (d[i] + d[i + 1] + d[i + 2] < 150 && d[i + 3] > 200) dark++; }
+    const bodyBg = getComputedStyle(document.body).backgroundColor, rect = cv.getBoundingClientRect();
+    return { darkPixelShare: +(dark / tot).toFixed(3), bodyBg, boardW: Math.round(rect.width) };
+  });
+}
+async function run(browser, tag, ctxOpts, full, darkReader) {
+  const ctx = await browser.newContext(Object.assign({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 }, ctxOpts));
   const page = await ctx.newPage(); watch(page, "[" + tag + "]");
+  if (darkReader) await page.addInitScript({ path: require.resolve("darkreader/darkreader.js", { paths: ["/tmp/dr/node_modules"] }) });
   const sfx = tag === "light" ? "" : "-" + tag;
-  await page.goto(base + "?test=1", { waitUntil: "networkidle" });
+  const go = async q => { await page.goto(base + "?test=1" + q, { waitUntil: "networkidle" }); if (darkReader) await page.evaluate(() => DarkReader.enable({ brightness: 100, contrast: 90, sepia: 10 })); await page.waitForTimeout(500); };
+  await go("");
   console.log(tag, "first visit:", await page.evaluate(() => PS.mode));
-  await page.waitForTimeout(900);
   if (full) await page.screenshot({ path: out + "game-tutorial.png" });
-  const t = await page.evaluate(() => PS.puzzle.solution);
-  await drag(page, 0, t[0]); await drag(page, 1, t[1]);
-  await page.waitForSelector("#dlgEnd[open]", { timeout: 4000 }); await page.waitForTimeout(1600);
-  if (full) await page.screenshot({ path: out + "game-tutorial-done.png" });
+  await solve(page);
+  await page.waitForSelector("#dlgEnd[open]", { timeout: 4000 }); await page.waitForTimeout(1200);
   await page.click("#btnEndMain"); await page.waitForTimeout(600);
-  console.log(tag, "after tutorial:", await page.evaluate(() => PS.mode));
+  console.log(tag, "after tutorial:", await page.evaluate(() => PS.mode), "daily par", await page.evaluate(() => PS.puzzle.par));
   await page.screenshot({ path: out + "game-daily" + sfx + ".png" });
   await solve(page);
-  await page.waitForSelector("#dlgEnd[open]", { timeout: 4000 }); await page.waitForTimeout(1900);
-  if (full) {
-    await page.screenshot({ path: out + "game-daily-win.png" });
-    await page.click("#btnShare"); await page.waitForTimeout(300);
-    console.log("daily share text:\n" + await page.evaluate(() => navigator.clipboard.readText()));
-  }
+  await page.waitForSelector("#dlgEnd[open]", { timeout: 4000 }); await page.waitForTimeout(1200);
   await page.click("#btnEndHome"); await page.waitForTimeout(700);
-  console.log(tag, "home:", await page.evaluate(() => PS.mode));
-  await page.screenshot({ path: out + "game-home" + sfx + ".png" });
   await page.click("#btnPlay", { force: true }); await page.waitForTimeout(700);
   console.log(tag, "map:", await page.evaluate(() => PS.mode));
-  if (full) await page.screenshot({ path: out + "game-map-start.png" });
   await page.click("#btnPlayNext"); await page.waitForTimeout(700);
-  await page.screenshot({ path: out + "game-level" + sfx + ".png" });
   await solve(page);
-  await page.waitForSelector("#dlgLevel[open]", { timeout: 4000 }); await page.waitForTimeout(1900);
+  await page.waitForSelector("#dlgLevel[open]", { timeout: 4000 }); await page.waitForTimeout(800);
   console.log(tag, "L1 stars:", await page.evaluate(() => PS.progress.stars[1]));
-  if (full) await page.screenshot({ path: out + "game-win.png" });
-  await page.click("#btnNext"); await page.waitForTimeout(700);
-  console.log(tag, "next level:", await page.evaluate(() => PS.puzzle.level));
-  if (!full) { await ctx.close(); return; }
-  await page.click("#btnHint"); await page.waitForTimeout(700);
-  await page.screenshot({ path: out + "game-hint.png" });
-  await solve(page);
-  await page.waitForSelector("#dlgLevel[open]", { timeout: 4000 }); await page.waitForTimeout(1500);
-  console.log("L2 with hint stars:", await page.evaluate(() => PS.progress.stars[2]), "hints left:", await page.evaluate(() => PS.progress.hints));
-  await page.click("#btnMap2"); await page.waitForTimeout(500);
-  // milestone at level 10
-  await page.evaluate(() => {
-    const stars = {}; for (let i = 1; i <= 9; i++) stars[i] = i === 4 ? 2 : 3;
-    localStorage.setItem("ps2:levels", JSON.stringify({ unlocked: 10, stars, best: {}, hints: 2, perf: 5, bestPerf: 5, mile: [5], threeSince: 2, tips: [] }));
-  });
-  await page.goto(base + "?test=1&level=10", { waitUntil: "networkidle" }); await page.waitForTimeout(500);
-  await solve(page);
-  await page.waitForSelector("#dlgMile[open]", { timeout: 4000 }); await page.waitForTimeout(2400);
-  await page.screenshot({ path: out + "game-milestone.png" });
-  await page.waitForTimeout(2200); await page.screenshot({ path: out + "game-milestone-rollover.png" });
-  console.log("milestone share:\n" + await page.evaluate(() => PS.mileShareText()));
-  console.log("after L10 hints:", await page.evaluate(() => PS.progress.hints));
-  await page.click("#btnMileNext"); await page.waitForTimeout(500);
-  console.log("after milestone level:", await page.evaluate(() => PS.puzzle.level));
-  // map with progress
-  await page.evaluate(() => {
-    const p = JSON.parse(localStorage.getItem("ps2:levels")); p.unlocked = 27;
-    for (let i = 1; i <= 26; i++) p.stars[i] = p.stars[i] || [3, 2, 3, 1, 3][i % 5];
-    localStorage.setItem("ps2:levels", JSON.stringify(p));
-  });
-  await page.goto(base + "?test=1&mode=levels", { waitUntil: "networkidle" }); await page.waitForTimeout(900);
-  await page.screenshot({ path: out + "game-map.png" });
-  // twist tip: locked glass arrives at level 12; level 25 is a 5x5 with a trap start
-  for (const L of [12, 19, 25]) {
-    await page.goto(base + "?test=1&level=" + L, { waitUntil: "networkidle" }); await page.waitForTimeout(800);
-    await page.screenshot({ path: out + "game-level" + L + ".png" });
-    await solve(page); await page.waitForSelector("#dlgLevel[open], #dlgMile[open]", { timeout: 4000 });
-    console.log("L" + L + " solved by test, twist:", await page.evaluate(() => PS.puzzle.twist), "par:", await page.evaluate(() => PS.puzzle.panes.filter(p => !p.locked).length));
+  for (const L of [5, 10, 20]) {
+    await go("&level=" + L);
+    const cc = await colourCheck(page, tag);
+    await page.screenshot({ path: out + "level" + L + sfx + ".png" });
+    if (L === 10 && full) { // undo + hint + stuck
+      const m = await page.evaluate(() => { const E = PS.E, p = PS.puzzle, s = PS.state.pos; return E.glideMoves(p, s).find(x => E.distOf(p, x.pos) !== E.distOf(p, s) - 1); });
+      if (m) { await swipe(page, m.pane, m.dir); await page.waitForTimeout(300); await page.screenshot({ path: out + "level10-after-wrong-move.png" }); await page.click("#btnUndo"); await idle(page); }
+      const back = await page.evaluate(() => PS.state.pos.join() === PS.puzzle.start.join());
+      await page.click("#btnHint"); await page.waitForTimeout(500); await page.screenshot({ path: out + "level10-hint.png" });
+      console.log(tag, "L10 undo restored start:", back, "hint tip:", await page.evaluate(() => document.getElementById("rule").textContent));
+    }
+    await solve(page);
+    await page.waitForSelector("#dlgLevel[open], #dlgMile[open]", { timeout: 4000 });
+    console.log(tag, "L" + L, "par", await page.evaluate(() => PS.puzzle.par), "moves", await page.evaluate(() => PS.state.moves), "stars", await page.evaluate(n => PS.progress.stars[n], L), JSON.stringify(cc));
   }
-  // free pane intro level 33 with patterns via settings
-  await page.goto(base + "?test=1&level=33", { waitUntil: "networkidle" });
-  await page.click("#btnSettings"); await page.waitForTimeout(500);
-  await page.click("label:has(#optPatterns)"); await page.waitForTimeout(300);
-  await page.screenshot({ path: out + "game-settings.png" });
-  await page.keyboard.press("Escape"); await page.waitForTimeout(400);
-  await page.screenshot({ path: out + "game-level33-free-patterns.png" });
-  await solve(page);
-  await page.waitForSelector("#dlgLevel[open], #dlgMile[open]", { timeout: 4000 });
-  console.log("L33 free pane solved: yes");
-  // help + stats
-  await page.goto(base + "?test=1", { waitUntil: "networkidle" }); await page.waitForTimeout(400);
-  await page.click("#btnHelp"); await page.waitForTimeout(1400);
-  await page.screenshot({ path: out + "game-help.png" });
-  await page.keyboard.press("Escape"); await page.waitForTimeout(300);
-  await page.click("#btnStats"); await page.waitForTimeout(700);
-  await page.screenshot({ path: out + "game-stats.png" });
-  await page.keyboard.press("Escape");
-  // big board (Sunday 6x6 practice)
-  await page.goto(base + "?test=1&date=2026-11-01", { waitUntil: "networkidle" }); await page.waitForTimeout(500);
-  await page.screenshot({ path: out + "game-daily-6x6.png" });
+  // map with progress: the bottom of the map (level 1) must be clear of the PLAY bar
+  await page.evaluate(() => { const p = JSON.parse(localStorage.getItem("ps2:levels")); p.unlocked = 27; for (let i = 1; i <= 26; i++) p.stars[i] = p.stars[i] || [3, 2, 3, 1, 3][i % 5]; localStorage.setItem("ps2:levels", JSON.stringify(p)); });
+  await go("&mode=levels"); await page.waitForTimeout(500);
+  await page.screenshot({ path: out + "map" + sfx + ".png" });
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await page.waitForTimeout(400);
+  const clear = await page.evaluate(() => { const bar = document.getElementById("mapBar").getBoundingClientRect(); return [...document.querySelectorAll("#mapPath .node")].every(n => { const r = n.getBoundingClientRect(); return r.bottom <= bar.top || r.top >= bar.bottom || r.bottom < 0; }); });
+  await page.screenshot({ path: out + "map-bottom" + sfx + ".png" });
+  console.log(tag, "map bottom: every node clear of PLAY bar:", clear);
+  if (!clear) errors.push(tag + " a map node is covered by the PLAY bar");
+  if (full) { await go(""); await page.click("#btnHelp"); await page.waitForTimeout(900); await page.screenshot({ path: out + "help.png" }); }
   await ctx.close();
 }
 (async () => {
-  const only = process.env.ONLY;
-  const b1 = await chromium.launch({ executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox"] });
-  if (!only || only === "light") await run(b1, "light", {}, true);
-  if (!only || only === "dark") await run(b1, "dark", { colorScheme: "dark" }, false);
-  await b1.close();
+  const only = process.env.ONLY, chrome = { executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox"] };
+  if (!only || only === "light" || only === "dark" || only === "darkreader") {
+    const b1 = await pw.chromium.launch(chrome);
+    if (!only || only === "light") await run(b1, "light", {}, true);
+    if (!only || only === "dark") await run(b1, "dark", { colorScheme: "dark" }, false);
+    if (!only || only === "darkreader") await run(b1, "darkreader", { colorScheme: "dark" }, false, true);
+    await b1.close();
+  }
   if (!only || only === "forcedark") {
-    const b2 = await chromium.launch({ executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox", "--force-dark-mode", "--enable-features=WebContentsForceDark"] });
-    await run(b2, "forcedark", { colorScheme: "dark" }, false);
-    await b2.close();
+    const b2 = await pw.chromium.launch({ executablePath: chrome.executablePath, args: ["--no-sandbox", "--force-dark-mode", "--enable-features=WebContentsForceDark"] });
+    await run(b2, "forcedark", { colorScheme: "dark" }, false); await b2.close();
+  }
+  if (!only || only === "firefox") {
+    const b3 = await pw.firefox.launch(); await run(b3, "firefox-dark", { colorScheme: "dark" }, false); await b3.close();
   }
   console.log("console errors/warnings:", errors.length ? errors : "none");
+  process.exit(errors.length ? 1 : 0);
 })().catch(e => { console.error("TEST FAILED:", e.message); console.log("errors so far:", errors); process.exit(1); });
