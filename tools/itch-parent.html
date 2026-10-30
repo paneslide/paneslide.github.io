@@ -1,8 +1,0 @@
-<!doctype html><html><head><link rel="icon" href="data:,"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;background:#1d1d1d;color:#ddd;font:14px sans-serif}#wrap{padding:20px}#wrap.full{padding:0}#wrap.full #fs{position:fixed;right:0;bottom:0;opacity:.01}iframe{display:block;border:0;background:#000}</style></head><body><div id="wrap">
-<script>
-var q=new URLSearchParams(location.search),w=q.get("w")||"960",h=q.get("h")||"600",full=q.get("full")==="1";
-if(full)document.getElementById("wrap").className="full";
-document.write('<iframe id="game_drop" allow="autoplay; fullscreen *; geolocation; microphone; camera; midi; monetization; xr-spatial-tracking; gamepad; gyroscope; accelerometer; xr; cross-origin-isolated; web-share" allowtransparency="true" webkitallowfullscreen="true" mozallowfullscreen="true" msallowfullscreen="true" allowfullscreen="true" scrolling="no" frameborder="0" src="'+q.get("src")+'" style="width:'+(full?"100vw":w+"px")+';height:'+(full?"100vh":h+"px")+'"></iframe>');
-</script>
-<button id="fs" onclick="document.getElementById('game_drop').requestFullscreen()">Fullscreen</button>
-</div></body></html>

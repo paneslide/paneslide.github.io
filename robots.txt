@@ -1,6 +1,2 @@
 User-agent: *
 Allow: /
-Disallow: /tools/
-Disallow: /content/
-
-Sitemap: https://paneslide.github.io/sitemap.xml

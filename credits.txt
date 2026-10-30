@@ -1,7 +1,0 @@
-PaneSlide credits and licences
-
-Code, graphics, logo, favicon, sounds: original work made for PaneSlide (2026). Sounds are synthesised at runtime with the Web Audio API; no audio files are used.
-Font: Fredoka (fonts/fredoka-latin.woff2, Latin subset, weights 500-700), Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One). Licensed under the SIL Open Font License 1.1; full text in fonts/OFL-Fredoka.txt. Self-hosted from the Google Fonts distribution.
-Scene art, candy buttons, icons, medals and map: original CSS/SVG made for PaneSlide (2026).
-Emoji in the share text are standard Unicode characters rendered by the visitor's device.
-Third-party code: none.
