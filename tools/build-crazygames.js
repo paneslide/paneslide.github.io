@@ -84,6 +84,8 @@ function buildSiteJs() {
   let s = read("js/site.js");
   s = patch(s, /\n  \/\/ ---------- offline app \(service worker\) ----------[\s\S]*?\n  window\.PaneSlideSite = /,
     "\n  // CrazyGames build: no offline worker, no update prompt and no install button.\n\n  window.PaneSlideSite = ", "remove SW + install");
+  // no share buttons and no outbound share links here, so no visit can arrive from a shared link
+  s = patch(s, /\n  \/\/ A visit from a shared link[^\n]*\n[^\n]*\n  if \(\/\[\?&\]ref=share[^\n]*/, "", "share arrival");
   s = patch(s, "function start() { loadAds(); loadAnalytics(); setupSW(); }", "function start() { loadAnalytics(); } // CrazyGames build: ads off, no service worker", "start()");
   s = patch(s, /\n  \/\/ ---------- ads \(off by default\) ----------[\s\S]*?\n  \}\n/, "\n  // CrazyGames build: no ad code at all (Basic Launch has ads disabled).\n", "remove ads code");
   s = patch(s, 'gc.count({ path: "event/" + p,', 'gc.count({ path: "crazygames/" + p,', "event prefix");

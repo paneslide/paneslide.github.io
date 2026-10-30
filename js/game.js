@@ -55,6 +55,31 @@
     prog.shards = (prog.shards || 0) + 2 * st0 + 15 * prog.boss.length; prog.v = 8;
     save("ps2:levels", prog);
   }
+  // ---------- anonymous return visits: only dates are kept (ps2:days), never an ID ----------
+  // On the first game visit of each local calendar day the game counts "returning" (when the player has an
+  // earlier day) and one "streak/<bucket>" for the run of consecutive days with a visit. Both go through
+  // track(), so like every event they are never sent under Do Not Track / GPC, on localhost or in ?test=1.
+  // Buckets: 1 day -> day-1, 2 -> day-2, 3-6 -> day-3, 7-13 -> day-7, 14-29 -> day-14, 30 or more -> day-30plus.
+  // (This is a visit streak. The daily-puzzle streak in ps2:stats needs a daily win and the gift streak needs
+  // the gift opened, so neither can be reused for it; the date helpers are shared.)
+  function streakBucket(k) { return k >= 30 ? "day-30plus" : k >= 14 ? "day-14" : k >= 7 ? "day-7" : k >= 3 ? "day-3" : k >= 2 ? "day-2" : "day-1"; }
+  function dayGap(a, b) { return Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000); }
+  var isDay = function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d || ""); };
+  var days = load("ps2:days", null);
+  if (!days || !isDay(days.first) || !isDay(days.start)) days = null;
+  (function countVisitDay() {
+    if (days && isDay(days.last) && days.last >= today) return; // already counted today (or the clock went back)
+    if (!days) { // first time with this version: players from before it start from their earliest known day
+      var known = [prog.login.last, stats.lastWin].filter(function (d) { return isDay(d) && d < today; }).sort()[0];
+      days = { first: known || today, start: today, last: null };
+    }
+    days.start = days.last === E.addDays(today, -1) ? days.start : today;
+    days.last = today; save("ps2:days", days);
+    var b = streakBucket(dayGap(days.start, today) + 1);
+    if (days.first < today) track("returning", "Returning player (first visit of a new day)");
+    track("streak/" + b, "Days in a row: " + b);
+  })();
+
   var SHARD = "<i class='ico shard'></i>";
   var GIFT = [5, 5, 10, 10, 15, 15, 30];
   var MECH_INFO = {
@@ -199,7 +224,7 @@
   }
   function ensureLevels(cb) {
     if (window.PANESLIDE_LEVELS) return cb();
-    var sc = document.createElement("script"); sc.src = "js/levels.js?v=10"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+    var sc = document.createElement("script"); sc.src = "js/levels.js?v=11"; sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
   }
   function getLevel(N) {
     var D = window.PANESLIDE_LEVELS;
@@ -851,6 +876,12 @@
     checkAch();
   }
   function currentStreak() { return (stats.lastWin === today || stats.lastWin === E.addDays(today, -1)) ? stats.streak : 0; }
+  // Every share text ends with a link to the site tagged ?ref=share (merged into any query it already has).
+  function shareLink(params) {
+    var u = new URL("https://" + SITE + "/");
+    Object.keys(params || {}).forEach(function (k) { u.searchParams.set(k, params[k]); });
+    u.searchParams.set("ref", "share"); return u.href;
+  }
   function shareText() {
     var par = parOf(puz), perfect = state.moves === par;
     var head = (practice ? "PaneSlide " + date : "PaneSlide #" + puz.number) + (perfect ? " ⭐" : "");
@@ -858,7 +889,7 @@
     for (var i = 0; i < h.length; i += 8) rows.push(h.slice(i, i + 8).join(""));
     var lines = [head, state.moves + " moves · par " + par].concat(rows);
     if (!practice && currentStreak() > 1) lines.push("🔥 " + currentStreak() + "-day streak");
-    lines.push(SITE);
+    lines.push(shareLink(practice ? { date: date } : null));
     return lines.join("\n");
   }
   function chipHTML(ico, val, cls) { return "<span class='stat" + (cls ? " " + cls : "") + "'>" + (ico ? "<i class='ico " + ico + "'></i>" : "") + val + "</span>"; }
@@ -913,7 +944,7 @@
     if (window.matchMedia && matchMedia("(pointer: coarse)").matches && navigator.share) { navigator.share({ text: t }).catch(function () {}); return; }
     copyText(t).then(function () { toast("✅ Copied!"); }, function () { toast("❌ Couldn't copy"); });
   }
-  function onShareBtn() { shareOut(shareText()); }
+  function onShareBtn() { track(practice ? "share/archive" : "share/daily", practice ? "Shared a past day's result" : "Shared the daily result"); shareOut(shareText()); }
   function onEndMain() {
     if (mode === "tutorial") { prefs.tutDone = true; prefs.glideTut = true; save("ps2:prefs", prefs); $("dlgEnd").close(); startDaily(); return; }
     $("dlgEnd").close(); openMap();
@@ -1012,7 +1043,7 @@
   function mileShareText(N, rank) {
     var lines = ["PaneSlide Levels 🏅", rank + " · level " + N, "⭐ " + totalStars() + " stars so far"];
     if (prog.perf > 1) lines.push("✨ " + prog.perf + " perfect levels in a row");
-    lines.push(SITE); return lines.join("\n");
+    lines.push(shareLink({ mode: "levels" })); return lines.join("\n");
   }
   function openMilestone(N, gained, boss) {
     var ri = rankIndex(N), rank = ri >= 0 ? RANKS[ri][1] : "Glass Spark", newRank = ri >= 0 && RANKS[ri][0] === N;
@@ -1553,9 +1584,9 @@
     $("btnNext").addEventListener("click", function () { $("dlgLevel").close(); startLevel(puz.level + 1); });
     $("btnReplay").addEventListener("click", function () { $("dlgLevel").close(); startLevel(puz.level); });
     $("btnMap2").addEventListener("click", function () { $("dlgLevel").close(); openMap(); });
-    $("btnLvShare").addEventListener("click", function () { shareOut("PaneSlide Level " + puz.level + " " + "⭐".repeat(lastStars) + "\n" + SITE); });
+    $("btnLvShare").addEventListener("click", function () { track("share/level", "Shared a level result"); shareOut("PaneSlide Level " + puz.level + " " + "⭐".repeat(lastStars) + "\n" + shareLink({ mode: "levels" })); });
     $("btnMileNext").addEventListener("click", function () { $("dlgMile").close(); startLevel(puz.level + 1); });
-    $("btnMileShare").addEventListener("click", function () { var N = puz.level, ri = rankIndex(N); shareOut(mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark")); });
+    $("btnMileShare").addEventListener("click", function () { track("share/milestone", "Shared a milestone"); var N = puz.level, ri = rankIndex(N); shareOut(mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark")); });
     $("btnSkip").addEventListener("click", function () { track("tutorial/skip", "Tutorial skipped"); prefs.tutDone = true; prefs.glideTut = true; save("ps2:prefs", prefs); hideCoach(true); startDaily(); });
     $("btnUndo").addEventListener("click", undo);
     $("btnHouse").addEventListener("click", function () { houseSel = null; openHouse(); });
@@ -1573,7 +1604,7 @@
   else startHome();
 
   if (TEST) window.PS = {
-    get puzzle() { return puz; }, get state() { return state; }, get mode() { return mode; }, shareText: shareText, mileShareText: function () { var N = puz.level, ri = rankIndex(N); return mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark"); },
+    get puzzle() { return puz; }, get state() { return state; }, get mode() { return mode; }, shareText: shareText, shareLink: shareLink, streakBucket: streakBucket, get days() { return days; }, mileShareText: function () { var N = puz.level, ri = rankIndex(N); return mileShareText(N, ri >= 0 ? RANKS[ri][1] : "Glass Spark"); },
     get progress() { return prog; }, progressCode: progressCode, readCode: readCode, get date() { return date; }, get practice() { return practice; }, hint: useHint, openHouse: openHouse, openShop: openShop, openGift: openGift, claimGift: claimGift, teaser: function (N) { return teaserHTML(N); }, E: E, swipe: swipe, undo: undo, cellPoint: function (r, c) { var b = boardEl.getBoundingClientRect(); return { x: b.left + PAD + c * STEP + CELL / 2, y: b.top + PAD + r * STEP + CELL / 2 }; }, get busy() { return anims.length > 0; }, get music() { return { on: prefs.music, vol: prefs.musicVol, playing: music.playing }; }, musicCheck: function () { return music.check(); }, get markShown() { return markEl ? markEl.dataset.key : null; },
     grabPoint: function (pi) { // centre of a cell of pane pi that no other same-axis pane covers
       var p = puz.panes[pi], r = boardEl.getBoundingClientRect(), cells = E.paneCells(p, state.pos[pi]);

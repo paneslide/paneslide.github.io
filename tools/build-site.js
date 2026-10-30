@@ -8,7 +8,7 @@ const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(ROOT, "
 const CFG = ctx.window.PANESLIDE_CONFIG, URL0 = CFG.SITE_URL.replace(/\/$/, "");
 const FIG = require("./site/figures.js");
 const SHOTS = fs.existsSync(path.join(ROOT, "img/guides/shots.json")) ? JSON.parse(fs.readFileSync(path.join(ROOT, "img/guides/shots.json"), "utf8")) : {};
-const V = "10"; // asset version for css/js links
+const V = "11"; // asset version for css/js links
 const TODAY = process.env.BUILD_DATE || "2026-10-29";
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const obf = s => s.split("").map(ch => "&#" + ch.charCodeAt(0) + ";").join(""); // light scraper protection, still a normal link

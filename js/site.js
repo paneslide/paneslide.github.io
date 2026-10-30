@@ -77,6 +77,9 @@
   document.addEventListener("visibilitychange", function () { if (document.hidden && tracking) sendNow(); });
   window.addEventListener("pagehide", function () { if (tracking) sendNow(); });
   function track(p, t) { (window.psq = window.psq || []).push([p, t || p]); flush(); }
+  // A visit from a shared link (share texts end in ?ref=share) is counted once as "share/arrival". The page view
+  // itself keeps its canonical path; GoatCounter's count.js also sends the query, so "share" shows as its referrer.
+  if (/[?&]ref=share(&|#|$)/.test(location.search)) track("share/arrival", "Arrived from a shared link");
   // Guide pages are already counted as page views; this adds one "read most of it" event per guide.
   function watchGuideReading() {
     var m = location.pathname.match(/^\/guides\/([a-z0-9-]+)\/$/); if (!m) return;

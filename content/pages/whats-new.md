@@ -9,6 +9,13 @@ priority: 0.5
 ---
 PaneSlide is updated often. This page lists what changed in each version, in plain words. Your progress is never reset by an update. When a new version is ready, the game shows a small "new version" message with a Refresh button.
 
+## Version 11 · 30 October 2026
+
+**Share links and anonymous return counts.**
+
+- Shared results now end with a full link to PaneSlide, so a friend can tap straight into the game.
+- The anonymous stats now also count shares and return visits (how many days in a row, in broad bands). There are still no cookies and no IDs, and nothing is sent when your browser asks not to be tracked. The [Privacy Policy](/privacy/) lists every event.
+
 ## Version 10 · 29 October 2026
 
 **Bigger and better on laptops and desktops.**
