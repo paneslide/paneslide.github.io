@@ -5,6 +5,7 @@ kicker: Privacy
 lead: Plain words first: PaneSlide has no accounts and keeps your game progress on your own device.
 desc: How PaneSlide handles your data: progress saved in your browser's local storage, no accounts, how Google AdSense cookies and personalised ads will work, analytics, children, your rights and how to contact us.
 priority: 0.4
+updated: 2026-10-30
 ---
 **Last updated: {{UPDATED}}**
 
@@ -64,6 +65,10 @@ Besides page views, the game counts a few anonymous **events**, so we can see wh
 - **Guides:** each guide page is counted as a page view, plus one event when a reader scrolls through three quarters of a guide.
 
 Events never include your name, email, progress code, the exact moves you made, or anything you type. They are not linked to each other or to an advertising ID. To keep the numbers small, the same event is counted at most once per browser tab session, at most 60 events are sent per session, and events are sent in small batches. To do this, PaneSlide keeps a short list of the event names it has already sent in your browser's session storage, which the browser deletes when you close the tab; it never leaves your device.
+
+### PaneSlide on itch.io and CrazyGames
+
+The versions of PaneSlide on itch.io and CrazyGames also count plays anonymously with GoatCounter, in the same way as this website. Their page views and events are recorded under "itch/" and "crazygames/" paths, so we can tell them apart from plays here. They use no cookies and send no personal data, and they also respect **Do Not Track** and **Global Privacy Control**: if your browser sends either signal, nothing is counted.
 
 ### Turning analytics off
 
